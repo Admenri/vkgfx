@@ -23,9 +23,9 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
   WGPUBindGroup CreateBindGroup(WGPUBindGroupDescriptor const* descriptor);
   WGPUBindGroupLayout CreateBindGroupLayout(
       WGPUBindGroupLayoutDescriptor const* descriptor);
-  WGPU_NULLABLE WGPUBuffer CreateBuffer(WGPUBufferDescriptor const* descriptor);
+  WGPUBuffer CreateBuffer(WGPUBufferDescriptor const* descriptor);
   WGPUCommandEncoder CreateCommandEncoder(
-      WGPU_NULLABLE WGPUCommandEncoderDescriptor const* descriptor);
+      WGPUCommandEncoderDescriptor const* descriptor);
   WGPUComputePipeline CreateComputePipeline(
       WGPUComputePipelineDescriptor const* descriptor);
   WGPUFuture CreateComputePipelineAsync(
@@ -41,8 +41,7 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
   WGPUFuture CreateRenderPipelineAsync(
       WGPURenderPipelineDescriptor const* descriptor,
       WGPUCreateRenderPipelineAsyncCallbackInfo callbackInfo);
-  WGPUSampler CreateSampler(
-      WGPU_NULLABLE WGPUSamplerDescriptor const* descriptor);
+  WGPUSampler CreateSampler(WGPUSamplerDescriptor const* descriptor);
   WGPUShaderModule CreateShaderModule(
       WGPUShaderModuleDescriptor const* descriptor);
   WGPUTexture CreateTexture(WGPUTextureDescriptor const* descriptor);
@@ -51,7 +50,7 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
   void GetFeatures(WGPUSupportedFeatures* features);
   WGPUStatus GetLimits(WGPULimits* limits);
   WGPUFuture GetLostFuture();
-  WGPUQueue GetQueue() WGPU_FUNCTION_ATTRIBUTE;
+  WGPUQueue GetQueue();
   WGPUBool HasFeature(WGPUFeatureName feature);
   WGPUFuture PopErrorScope(WGPUPopErrorScopeCallbackInfo callbackInfo);
   void PushErrorScope(WGPUErrorFilter filter);

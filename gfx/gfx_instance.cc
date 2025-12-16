@@ -12,159 +12,6 @@
 
 namespace vkgfx {
 
-namespace {
-
-const std::vector<const char*> kLayerNames = {
-    "VK_LAYER_KHRONOS_validation",
-};
-
-const std::vector<const char*> kExtensionNames = {
-    VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
-};
-
-const std::array<WGPUInstanceFeatureName, 3> kSupportedInstanceFeatures = {
-    WGPUInstanceFeatureName::WGPUInstanceFeatureName_TimedWaitAny,
-    WGPUInstanceFeatureName::WGPUInstanceFeatureName_ShaderSourceSPIRV,
-    WGPUInstanceFeatureName::WGPUInstanceFeatureName_MultipleDevicesPerAdapter,
-};
-
-VKAPI_ATTR VkBool32 VKAPI_CALL OnInstanceCreationDebugUtilsCallback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-    VkDebugUtilsMessageTypeFlagsEXT messageTypes,
-    const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-    void* pUserData) {
-  GFX_DEBUG() << pCallbackData->pMessage;
-  return VK_FALSE;
-}
-
-bool InitializeVolkLoader() {
-  static VkResult volk_result = VK_NOT_READY;
-  static std::once_flag volk_init_flag;
-  std::call_once(volk_init_flag, [&]() { volk_result = volkInitialize(); });
-  return volk_result == VK_SUCCESS;
-}
-
-}  // namespace
-
-// static
-RefPtr<GFXInstance> GFXInstance::Create(
-    WGPU_NULLABLE WGPUInstanceDescriptor const* descriptor) {
-  if (!InitializeVolkLoader()) {
-    GFX_ERROR() << "Failed to initialize volk loader.";
-    return nullptr;
-  }
-
-  uint32_t instance_version = 0;
-  vkEnumerateInstanceVersion(&instance_version);
-  if (instance_version < VK_API_VERSION_1_1) {
-    GFX_ERROR() << "Vulkan 1.1 or higher is required.";
-    return nullptr;
-  }
-
-  uint32_t layer_count;
-  vkEnumerateInstanceLayerProperties(&layer_count, nullptr);
-  std::vector<VkLayerProperties> available_layers(layer_count);
-  vkEnumerateInstanceLayerProperties(&layer_count, available_layers.data());
-  for (const auto& layer : available_layers) {
-    GFX_INFO() << "Available layer: " << layer.layerName;
-  }
-
-  uint32_t extension_count;
-  vkEnumerateInstanceExtensionProperties(nullptr, &extension_count, nullptr);
-  std::vector<VkExtensionProperties> available_extensions(extension_count);
-  vkEnumerateInstanceExtensionProperties(nullptr, &extension_count,
-                                         available_extensions.data());
-  for (const auto& extension : available_extensions) {
-    GFX_INFO() << "Available extension: " << extension.extensionName;
-  }
-
-  // Vulkan 1.1 required
-  VkApplicationInfo application_info{};
-  application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-  application_info.pEngineName = "VkGFX";
-  application_info.engineVersion = VK_MAKE_VERSION(0, 0, 0);
-  application_info.apiVersion = VK_API_VERSION_1_1;
-
-  // Instance info with validation layers and debug utils extension enabled
-  VkInstanceCreateInfo create_info{};
-  create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  create_info.pApplicationInfo = &application_info;
-  create_info.enabledLayerCount = static_cast<uint32_t>(kLayerNames.size());
-  create_info.ppEnabledLayerNames = kLayerNames.data();
-  create_info.enabledExtensionCount =
-      static_cast<uint32_t>(kExtensionNames.size());
-  create_info.ppEnabledExtensionNames = kExtensionNames.data();
-
-  // Debug utils messenger create info for instance creation
-  VkDebugUtilsMessengerCreateInfoEXT utils_messenger_create_info{};
-  utils_messenger_create_info.sType =
-      VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-  utils_messenger_create_info.messageSeverity =
-      VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
-      VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-  utils_messenger_create_info.messageType =
-      VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT |
-      VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT |
-      VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-  utils_messenger_create_info.pfnUserCallback =
-      OnInstanceCreationDebugUtilsCallback;
-  utils_messenger_create_info.pUserData = nullptr;
-
-  create_info.pNext = &utils_messenger_create_info;
-
-  VkInstance instance;
-  if (vkCreateInstance(&create_info, nullptr, &instance) != VK_SUCCESS) {
-    GFX_ERROR() << "Failed to create Vulkan instance.";
-    return nullptr;
-  }
-
-  volkLoadInstance(instance);
-
-  VkDebugUtilsMessengerEXT debug_messenger;
-  if (vkCreateDebugUtilsMessengerEXT(instance, &utils_messenger_create_info,
-                                     nullptr, &debug_messenger) != VK_SUCCESS)
-    debug_messenger = VK_NULL_HANDLE;
-
-  return RefPtr<GFXInstance>(new GFXInstance(instance, debug_messenger));
-}
-
-// static
-void GFXInstance::GetFeatures(WGPUSupportedInstanceFeatures* features) {
-  features->featureCount =
-      static_cast<uint32_t>(kSupportedInstanceFeatures.size());
-  features->features = kSupportedInstanceFeatures.data();
-}
-
-// static
-WGPUStatus GFXInstance::GetLimits(WGPUInstanceLimits* limits) {
-  if (limits->nextInChain) {
-    GFX_ERROR() << "Unsupported chained struct in GFXInstance::GetLimits.";
-    return WGPUStatus_Error;
-  }
-
-  limits->timedWaitAnyMaxCount = std::numeric_limits<size_t>::max();
-  return WGPUStatus_Success;
-}
-
-// static
-WGPUBool GFXInstance::HasFeature(WGPUInstanceFeatureName feature) {
-  return std::find(kSupportedInstanceFeatures.begin(),
-                   kSupportedInstanceFeatures.end(),
-                   feature) != kSupportedInstanceFeatures.end();
-}
-
-// static
-void GFXInstance::SupportedInstanceFeaturesFreeMembers(
-    WGPUSupportedInstanceFeatures supportedInstanceFeatures) {
-  // Nothing to free for now.
-}
-
-// static
-void GFXInstance::SupportedWGSLLanguageFeaturesFreeMembers(
-    WGPUSupportedWGSLLanguageFeatures supportedWGSLLanguageFeatures) {
-  // TODO: WGSL compiler integration
-}
-
 ///////////////////////////////////////////////////////////////////////////////
 // GFXInstance Implement
 
@@ -195,10 +42,12 @@ WGPUBool GFXInstance::HasWGSLLanguageFeature(
   return WGPUBool();
 }
 
-void GFXInstance::ProcessEvents() {}
+void GFXInstance::ProcessEvents() {
+  // No-op
+}
 
 WGPUFuture GFXInstance::RequestAdapter(
-    WGPU_NULLABLE WGPURequestAdapterOptions const* options,
+    WGPURequestAdapterOptions const* options,
     WGPURequestAdapterCallbackInfo callbackInfo) {
   if (!callbackInfo.callback)
     return kInvalidFuture;
@@ -235,6 +84,7 @@ WGPUFuture GFXInstance::RequestAdapter(
     vkGetPhysicalDeviceFeatures(vk_adapter, &device_features);
   }
 
+  // TODO: select adapter based on options
   GFXAdapter* adapter_impl = nullptr;
   if (adapter_count)
     adapter_impl = new GFXAdapter(physical_devices[0]);
@@ -247,7 +97,7 @@ WGPUFuture GFXInstance::RequestAdapter(
 }
 
 WGPUWaitStatus GFXInstance::WaitAny(size_t futureCount,
-                                    WGPU_NULLABLE WGPUFutureWaitInfo* futures,
+                                    WGPUFutureWaitInfo* futures,
                                     uint64_t timeoutNS) {
   if (!futures)
     return WGPUWaitStatus_Error;
@@ -260,3 +110,51 @@ WGPUWaitStatus GFXInstance::WaitAny(size_t futureCount,
 }
 
 }  // namespace vkgfx
+
+///////////////////////////////////////////////////////////////////////////////
+// Member Function
+
+GFX_REFCOUNTED_EXPORT(Instance, vkgfx::GFXInstance);
+
+GFX_EXPORT WGPUSurface
+GFX_FUNCTION(InstanceCreateSurface)(WGPUInstance instance,
+                                    WGPUSurfaceDescriptor const* descriptor) {
+  auto* self = static_cast<vkgfx::GFXInstance*>(instance);
+  return self->CreateSurface(descriptor);
+}
+
+GFX_EXPORT void GFX_FUNCTION(InstanceGetWGSLLanguageFeatures)(
+    WGPUInstance instance,
+    WGPUSupportedWGSLLanguageFeatures* features) {
+  auto* self = static_cast<vkgfx::GFXInstance*>(instance);
+  self->GetWGSLLanguageFeatures(features);
+}
+
+GFX_EXPORT WGPUBool GFX_FUNCTION(InstanceHasWGSLLanguageFeature)(
+    WGPUInstance instance,
+    WGPUWGSLLanguageFeatureName feature) {
+  auto* self = static_cast<vkgfx::GFXInstance*>(instance);
+  return self->HasWGSLLanguageFeature(feature);
+}
+
+GFX_EXPORT void GFX_FUNCTION(InstanceProcessEvents)(WGPUInstance instance) {
+  auto* self = static_cast<vkgfx::GFXInstance*>(instance);
+  self->ProcessEvents();
+}
+
+GFX_EXPORT WGPUFuture GFX_FUNCTION(InstanceRequestAdapter)(
+    WGPUInstance instance,
+    WGPU_NULLABLE WGPURequestAdapterOptions const* options,
+    WGPURequestAdapterCallbackInfo callbackInfo) {
+  auto* self = static_cast<vkgfx::GFXInstance*>(instance);
+  return self->RequestAdapter(options, callbackInfo);
+}
+
+GFX_EXPORT WGPUWaitStatus
+GFX_FUNCTION(InstanceWaitAny)(WGPUInstance instance,
+                              size_t futureCount,
+                              WGPU_NULLABLE WGPUFutureWaitInfo* futures,
+                              uint64_t timeoutNS) {
+  auto* self = static_cast<vkgfx::GFXInstance*>(instance);
+  return self->WaitAny(futureCount, futures, timeoutNS);
+}

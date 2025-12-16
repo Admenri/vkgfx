@@ -1,0 +1,58 @@
+// Copyright 2025 Admenri.
+// Use of this source code is governed by a MIT-style license that can be
+// found in the LICENSE file.
+
+#ifndef GFX_GFX_UTILS_H_
+#define GFX_GFX_UTILS_H_
+
+#include <string>
+#include <string_view>
+
+#include "gfx/backend_config.h"
+
+namespace vkgfx {
+
+// String view utility
+inline WGPUStringView MakeStringView(const std::string_view& view) {
+  if (view.empty())
+    return WGPUStringView();
+
+  char* data = new char[view.size() + 1];
+  std::memcpy(data, view.data(), view.size() + 1);
+  return WGPUStringView{data, view.size()};
+}
+
+inline void FreeStringView(WGPUStringView& view) {
+  if (view.data)
+    delete[] view.data;
+}
+
+// pNext chain builder utility
+class NextChainBuilder {
+ public:
+  template <typename Ty>
+  explicit NextChainBuilder(Ty* head)
+      : current_(reinterpret_cast<VkBaseOutStructure*>(head)) {
+    while (current_->pNext)
+      current_ = current_->pNext;
+  }
+
+  NextChainBuilder(const NextChainBuilder&) = delete;
+  NextChainBuilder& operator=(const NextChainBuilder&) = delete;
+
+  template <typename Ty>
+  void Add(Ty* data) {
+    current_->pNext = reinterpret_cast<VkBaseOutStructure*>(data);
+    current_ = current_->pNext;
+  }
+
+ private:
+  void* operator new(size_t) = delete;
+  void* operator new(size_t, void*) = delete;
+
+  VkBaseOutStructure* current_;
+};
+
+}  // namespace vkgfx
+
+#endif  // !GFX_GFX_UTILS_H_

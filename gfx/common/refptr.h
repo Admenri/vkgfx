@@ -22,7 +22,7 @@ template <class T,
           typename CountTy = uint64_t>
 class RefCounted {
  public:
-  RefCounted() : ref_count_(0) {}
+  RefCounted() : ref_count_(1) {}
 
   RefCounted(const RefCounted&) = delete;
   RefCounted& operator=(const RefCounted&) = delete;
@@ -54,52 +54,37 @@ class RefCounted {
   mutable std::atomic<CountTy> ref_count_;
 };
 
-// -----------------------------------------------------------------------------
-// RefPtr<Ty>
-// Smart pointer for classes inheriting from RefCounted.
-// Automatically calls AddRef() on construction/copy and Release() on
-// destruction.
-// -----------------------------------------------------------------------------
 template <typename T>
 class RefPtr {
  public:
-  // Typedefs
   using element_type = T;
 
-  // 1. Constructors
   constexpr RefPtr() noexcept = default;
   constexpr RefPtr(std::nullptr_t) noexcept {}
+  constexpr RefPtr(T* p) noexcept : ptr_(p) {}
 
-  // Constructor from raw pointer.
-  // Assumes the caller is giving us a new reference, so we AddRef.
-  RefPtr(T* p) : ptr_(p) {
+  RefPtr(RefPtr&& other) noexcept : ptr_(other.ptr_) { other.ptr_ = nullptr; }
+  RefPtr(const RefPtr& other) noexcept : ptr_(other.ptr_) {
     if (ptr_)
       ptr_->AddRef();
   }
 
-  // Copy Constructor
-  RefPtr(const RefPtr& other) : RefPtr(other.ptr_) {}
-
-  // Template Copy Constructor (for implicit conversion of Derived to Base)
   template <typename U>
-  RefPtr(const RefPtr<U>& other) : RefPtr(other.get()) {}
+  RefPtr(const RefPtr<U>& other) noexcept : ptr_(other.get()) {
+    if (ptr_)
+      ptr_->AddRef();
+  }
 
-  // Move Constructor
-  RefPtr(RefPtr&& other) noexcept : ptr_(other.ptr_) { other.ptr_ = nullptr; }
-
-  // Template Move Constructor
   template <typename U>
   RefPtr(RefPtr<U>&& other) noexcept : ptr_(other.ptr_) {
     other.ptr_ = nullptr;
   }
 
-  // 2. Destructor
   ~RefPtr() {
     if (ptr_)
       ptr_->Release();
   }
 
-  // 3. Assignment Operators
   RefPtr& operator=(T* p) { return *this = RefPtr(p); }
 
   RefPtr& operator=(std::nullptr_t) {
@@ -107,31 +92,27 @@ class RefPtr {
     return *this;
   }
 
-  // Unified assignment operator.
   RefPtr& operator=(RefPtr r) noexcept {
     swap(r);
     return *this;
   }
 
-  // 4. Accessors
   T* get() const { return ptr_; }
-
-  // Dereference operators
   T& operator*() const { return *ptr_; }
   T* operator->() const { return ptr_; }
-
-  // Implicit conversion to raw pointer (as requested)
   operator T*() const { return ptr_; }
-
-  // Explicit bool conversion (validity check)
   explicit operator bool() const { return ptr_ != nullptr; }
 
-  // 5. Utilities
   void reset() { RefPtr().swap(*this); }
   void swap(RefPtr& other) noexcept { std::swap(ptr_, other.ptr_); }
 
+  [[nodiscard]] T* release() {
+    T* ptr = ptr_;
+    ptr_ = nullptr;
+    return ptr;
+  }
+
  private:
-  // Allow conversion between compatible types (Derived -> Base)
   template <typename U>
   friend class RefPtr;
 

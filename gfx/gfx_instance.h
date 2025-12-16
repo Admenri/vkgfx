@@ -19,7 +19,6 @@ namespace vkgfx {
 struct GFXInstance : public RefCounted<GFXInstance>, public WGPUInstanceImpl {
  public:
   static constexpr WGPUFuture kInvalidFuture = {0};
-
   static constexpr WGPUFuture kImmediateFuture = {
       std::numeric_limits<uint64_t>::max(),
   };
@@ -29,29 +28,18 @@ struct GFXInstance : public RefCounted<GFXInstance>, public WGPUInstanceImpl {
   GFXInstance(const GFXInstance&) = delete;
   GFXInstance& operator=(const GFXInstance&) = delete;
 
-  static RefPtr<GFXInstance> Create(
-      WGPU_NULLABLE WGPUInstanceDescriptor const* descriptor);
-  static void GetFeatures(WGPUSupportedInstanceFeatures* features);
-  static WGPUStatus GetLimits(WGPUInstanceLimits* limits);
-  static WGPUBool HasFeature(WGPUInstanceFeatureName feature);
-
-  static void SupportedInstanceFeaturesFreeMembers(
-      WGPUSupportedInstanceFeatures supportedInstanceFeatures);
-  static void SupportedWGSLLanguageFeaturesFreeMembers(
-      WGPUSupportedWGSLLanguageFeatures supportedWGSLLanguageFeatures);
-
   WGPUSurface CreateSurface(WGPUSurfaceDescriptor const* descriptor);
   void GetWGSLLanguageFeatures(WGPUSupportedWGSLLanguageFeatures* features);
   WGPUBool HasWGSLLanguageFeature(WGPUWGSLLanguageFeatureName feature);
   void ProcessEvents();
-  WGPUFuture RequestAdapter(
-      WGPU_NULLABLE WGPURequestAdapterOptions const* options,
-      WGPURequestAdapterCallbackInfo callbackInfo);
+  WGPUFuture RequestAdapter(WGPURequestAdapterOptions const* options,
+                            WGPURequestAdapterCallbackInfo callbackInfo);
   WGPUWaitStatus WaitAny(size_t futureCount,
-                         WGPU_NULLABLE WGPUFutureWaitInfo* futures,
+                         WGPUFutureWaitInfo* futures,
                          uint64_t timeoutNS);
 
  private:
+  friend GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor);
   GFXInstance(VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger);
 
   VkInstance instance_;
