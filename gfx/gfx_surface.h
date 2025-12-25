@@ -13,15 +13,12 @@ struct WGPUSurfaceImpl {};
 namespace vkgfx {
 
 // https://gpuweb.github.io/gpuweb/
-struct GFXSurface : public RefCounted<GFXSurface>, public WGPUSurfaceImpl {
+class GFXSurface : public RefCounted<GFXSurface>, public WGPUSurfaceImpl {
  public:
   ~GFXSurface();
 
   GFXSurface(const GFXSurface&) = delete;
   GFXSurface& operator=(const GFXSurface&) = delete;
-
-  static void SurfaceCapabilitiesFreeMembers(
-      WGPUSurfaceCapabilities surfaceCapabilities);
 
   void Configure(WGPUSurfaceConfiguration const* config);
   WGPUStatus GetCapabilities(WGPUAdapter adapter,
@@ -33,7 +30,9 @@ struct GFXSurface : public RefCounted<GFXSurface>, public WGPUSurfaceImpl {
 
  private:
   friend class GFXInstance;
-  GFXSurface(VkSurfaceKHR surface);
+  GFXSurface(RefPtr<GFXInstance> instance, VkSurfaceKHR surface);
+
+  RefPtr<GFXInstance> instance_;
 
   VkSurfaceKHR surface_;
 };

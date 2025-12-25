@@ -27,6 +27,13 @@ inline void FreeStringView(WGPUStringView& view) {
     delete[] view.data;
 }
 
+inline std::string_view FromWGPUStringView(const WGPUStringView& view) {
+  if (!view.data || !view.length)
+    return std::string_view();
+
+  return std::string_view(view.data, view.length);
+}
+
 // pNext chain builder utility
 class NextChainBuilder {
  public:

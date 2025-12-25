@@ -16,7 +16,7 @@ struct WGPUInstanceImpl {};
 namespace vkgfx {
 
 // https://gpuweb.github.io/gpuweb/#gpu
-struct GFXInstance : public RefCounted<GFXInstance>, public WGPUInstanceImpl {
+class GFXInstance : public RefCounted<GFXInstance>, public WGPUInstanceImpl {
  public:
   static constexpr WGPUFuture kInvalidFuture = {0};
   static constexpr WGPUFuture kImmediateFuture = {
@@ -27,6 +27,9 @@ struct GFXInstance : public RefCounted<GFXInstance>, public WGPUInstanceImpl {
 
   GFXInstance(const GFXInstance&) = delete;
   GFXInstance& operator=(const GFXInstance&) = delete;
+
+  VkInstance operator*() { return instance_; }
+  VkInstance operator*() const { return instance_; }
 
   WGPUSurface CreateSurface(WGPUSurfaceDescriptor const* descriptor);
   void GetWGSLLanguageFeatures(WGPUSupportedWGSLLanguageFeatures* features);

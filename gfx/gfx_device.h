@@ -57,6 +57,7 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
   void SetLabel(WGPUStringView label);
 
  private:
+  friend class GFXAdapter;
   GFXDevice(VkDevice device);
 
   VkDevice device_;
