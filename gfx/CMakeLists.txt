@@ -9,12 +9,48 @@ set(VKGFX_GFX_SRC
   backend_config.h
   gfx_adapter.cc
   gfx_adapter.h
+  gfx_bind_group.cc
+  gfx_bind_group.h
+  gfx_bind_group_layout.cc
+  gfx_bind_group_layout.h
+  gfx_buffer.cc
+  gfx_buffer.h
+  gfx_command_buffer.cc
+  gfx_command_buffer.h
+  gfx_command_encoder.cc
+  gfx_command_encoder.h
+  gfx_compute_pass_encoder.cc
+  gfx_compute_pass_encoder.h
+  gfx_compute_pipeline.cc
+  gfx_compute_pipeline.h
   gfx_device.cc
   gfx_device.h
   gfx_instance.cc
   gfx_instance.h
+  gfx_pipeline_layout.cc
+  gfx_pipeline_layout.h
+  gfx_query_set.cc
+  gfx_query_set.h
+  gfx_queue.cc
+  gfx_queue.h
+  gfx_render_bundle.cc
+  gfx_render_bundle.h
+  gfx_render_bundle_encoder.cc
+  gfx_render_bundle_encoder.h
+  gfx_render_pass_encoder.cc
+  gfx_render_pass_encoder.h
+  gfx_render_pipeline.cc
+  gfx_render_pipeline.h
+  gfx_sampler.cc
+  gfx_sampler.h
+  gfx_shader_module.cc
+  gfx_shader_module.h
   gfx_surface.cc
   gfx_surface.h
+  gfx_texture.cc
+  gfx_texture.h
+  gfx_texture_view.h
+  gfx_texture_view.cc
   gfx_utils.h
   gfx_wgpu.cc
   gfx_wgpu.h

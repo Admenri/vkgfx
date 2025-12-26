@@ -9,9 +9,18 @@ namespace vkgfx {
 ///////////////////////////////////////////////////////////////////////////////
 // GFXDevice Implement
 
-GFXDevice::GFXDevice(VkDevice device) : device_(device) {}
+GFXDevice::GFXDevice(const std::string& label,
+                     VkDevice device,
+                     WGPUDeviceLostCallbackInfo device_lost_callback,
+                     WGPUUncapturedErrorCallbackInfo uncaptured_error_callback)
+    : label_(label),
+      device_(device),
+      device_lost_callback_(device_lost_callback),
+      uncaptured_error_callback_(uncaptured_error_callback) {}
 
-GFXDevice::~GFXDevice() {}
+GFXDevice::~GFXDevice() {
+  Destroy();
+}
 
 WGPUBindGroup GFXDevice::CreateBindGroup(
     WGPUBindGroupDescriptor const* descriptor) {
@@ -82,7 +91,12 @@ WGPUTexture GFXDevice::CreateTexture(WGPUTextureDescriptor const* descriptor) {
   return WGPUTexture();
 }
 
-void GFXDevice::Destroy() {}
+void GFXDevice::Destroy() {
+  if (device_) {
+    vkDestroyDevice(device_, nullptr);
+    device_ = VK_NULL_HANDLE;
+  }
+}
 
 WGPUStatus GFXDevice::GetAdapterInfo(WGPUAdapterInfo* adapterInfo) {
   return WGPUStatus();
@@ -113,7 +127,9 @@ WGPUFuture GFXDevice::PopErrorScope(
 
 void GFXDevice::PushErrorScope(WGPUErrorFilter filter) {}
 
-void GFXDevice::SetLabel(WGPUStringView label) {}
+void GFXDevice::SetLabel(WGPUStringView label) {
+  label_ = std::string(label.data, label.length);
+}
 
 ///////////////////////////////////////////////////////////////////////////////
 // Member Function

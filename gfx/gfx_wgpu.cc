@@ -34,7 +34,7 @@ VKAPI_ATTR VkBool32 VKAPI_CALL OnInstanceCreationDebugUtilsCallback(
     VkDebugUtilsMessageTypeFlagsEXT messageTypes,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData) {
-  GFX_DEBUG() << pCallbackData->pMessage;
+  GFX_DEBUG() << "[VkDebugUtils] " << pCallbackData->pMessage;
   return VK_FALSE;
 }
 
@@ -53,14 +53,14 @@ bool InitializeVolkLoader() {
 // static
 GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
   if (!InitializeVolkLoader()) {
-    GFX_ERROR() << "Failed to initialize volk loader.";
+    GFX_ERROR() << __FUNCTION__ << ": failed to initialize volk loader.";
     return nullptr;
   }
 
   uint32_t instance_version = 0;
   vkEnumerateInstanceVersion(&instance_version);
   if (instance_version < VK_API_VERSION_1_1) {
-    GFX_ERROR() << "Vulkan 1.1 or higher is required.";
+    GFX_ERROR() << __FUNCTION__ << ": Vulkan 1.1 or higher is required.";
     return nullptr;
   }
 
@@ -82,15 +82,13 @@ GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
   }
 
   // Vulkan 1.1 required
-  VkApplicationInfo application_info{};
-  application_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+  VkApplicationInfo application_info = {VK_STRUCTURE_TYPE_APPLICATION_INFO};
   application_info.pEngineName = "VkGFX";
   application_info.engineVersion = VK_MAKE_VERSION(0, 0, 0);
   application_info.apiVersion = VK_API_VERSION_1_1;
 
   // Instance info with validation layers and debug utils extension enabled
-  VkInstanceCreateInfo create_info{};
-  create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  VkInstanceCreateInfo create_info = {VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO};
   create_info.pApplicationInfo = &application_info;
   create_info.enabledLayerCount = static_cast<uint32_t>(kLayerNames.size());
   create_info.ppEnabledLayerNames = kLayerNames.data();
@@ -98,10 +96,11 @@ GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
       static_cast<uint32_t>(kExtensionNames.size());
   create_info.ppEnabledExtensionNames = kExtensionNames.data();
 
+  NextChainBuilder create_chain(&create_info);
+
   // Debug utils messenger create info for instance creation
-  VkDebugUtilsMessengerCreateInfoEXT utils_messenger_create_info{};
-  utils_messenger_create_info.sType =
-      VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+  VkDebugUtilsMessengerCreateInfoEXT utils_messenger_create_info = {
+      VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT};
   utils_messenger_create_info.messageSeverity =
       VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT |
       VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
@@ -113,7 +112,7 @@ GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
       OnInstanceCreationDebugUtilsCallback;
   utils_messenger_create_info.pUserData = nullptr;
 
-  create_info.pNext = &utils_messenger_create_info;
+  create_chain.Add(&utils_messenger_create_info);
 
   VkInstance instance;
   if (vkCreateInstance(&create_info, nullptr, &instance) != VK_SUCCESS) {
@@ -129,7 +128,7 @@ GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
                                      nullptr, &debug_messenger) != VK_SUCCESS)
     debug_messenger = VK_NULL_HANDLE;
 
-  return new GFXInstance(instance, debug_messenger);
+  return AdaptExternalRefCounted(new GFXInstance(instance, debug_messenger));
 }
 
 // static
@@ -142,7 +141,8 @@ void GetInstanceFeatures(WGPUSupportedInstanceFeatures* features) {
 // static
 WGPUStatus GetInstanceLimits(WGPUInstanceLimits* limits) {
   if (limits->nextInChain) {
-    GFX_ERROR() << "Unsupported chained struct in GetInstanceLimits.";
+    GFX_ERROR() << __FUNCTION__
+                << ": unsupported chained struct in GetInstanceLimits.";
     return WGPUStatus_Error;
   }
 

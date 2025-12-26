@@ -5,8 +5,10 @@
 #ifndef GFX_GFX_DEVICE_H_
 #define GFX_GFX_DEVICE_H_
 
-#include "gfx/backend_config.h"
+#include <string>
+
 #include "gfx/common/refptr.h"
+#include "gfx/gfx_config.h"
 
 struct WGPUDeviceImpl {};
 
@@ -58,9 +60,15 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
 
  private:
   friend class GFXAdapter;
-  GFXDevice(VkDevice device);
+  GFXDevice(const std::string& label,
+            VkDevice device,
+            WGPUDeviceLostCallbackInfo device_lost_callback,
+            WGPUUncapturedErrorCallbackInfo uncaptured_error_callback);
 
+  std::string label_;
   VkDevice device_;
+  WGPUDeviceLostCallbackInfo device_lost_callback_;
+  WGPUUncapturedErrorCallbackInfo uncaptured_error_callback_;
 };
 
 }  // namespace vkgfx

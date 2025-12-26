@@ -8,9 +8,17 @@
 #include <string>
 #include <string_view>
 
-#include "gfx/backend_config.h"
+#include "gfx/gfx_config.h"
 
 namespace vkgfx {
+
+// External ref_counted adapt
+template <class Ty>
+inline Ty* AdaptExternalRefCounted(Ty* obj) {
+  if (obj)
+    obj->AddRef();
+  return obj;
+}
 
 // String view utility
 inline WGPUStringView MakeStringView(const std::string_view& view) {

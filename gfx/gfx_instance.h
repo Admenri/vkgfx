@@ -8,8 +8,8 @@
 #include <limits>
 #include <utility>
 
-#include "gfx/backend_config.h"
 #include "gfx/common/refptr.h"
+#include "gfx/gfx_config.h"
 
 struct WGPUInstanceImpl {};
 

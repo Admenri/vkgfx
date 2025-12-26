@@ -19,6 +19,6 @@
     static_cast<type*>(self)->Release();                           \
   }
 
-#define GFX_STRVIEW(x) WGPUStringView{x, sizeof(x) - 1}
+#define GFX_CONST_STRVIEW(x) WGPUStringView{x, sizeof(x) - 1}
 
-#endif  // !GFX_CONFIG_H_
+#endif  // GFX_CONFIG_H_

@@ -8,6 +8,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <iostream>
 #include <utility>
 
 namespace vkgfx {
@@ -22,7 +23,7 @@ template <class T,
           typename CountTy = uint64_t>
 class RefCounted {
  public:
-  RefCounted() : ref_count_(1) {}
+  RefCounted() : ref_count_(0) {}
 
   RefCounted(const RefCounted&) = delete;
   RefCounted& operator=(const RefCounted&) = delete;
@@ -54,90 +55,168 @@ class RefCounted {
   mutable std::atomic<CountTy> ref_count_;
 };
 
-template <typename T>
+template <class T>
 class RefPtr {
  public:
-  using element_type = T;
+  typedef T element_type;
 
-  constexpr RefPtr() noexcept = default;
-  constexpr RefPtr(std::nullptr_t) noexcept {}
-  constexpr RefPtr(T* p) noexcept : ptr_(p) {}
+  constexpr RefPtr() = default;
+  constexpr RefPtr(std::nullptr_t) {}
 
-  RefPtr(RefPtr&& other) noexcept : ptr_(other.ptr_) { other.ptr_ = nullptr; }
-  RefPtr(const RefPtr& other) noexcept : ptr_(other.ptr_) {
+  RefPtr(T* p) : ptr_(p) {
     if (ptr_)
-      ptr_->AddRef();
-  }
-
-  template <typename U>
-  RefPtr(const RefPtr<U>& other) noexcept : ptr_(other.get()) {
-    if (ptr_)
-      ptr_->AddRef();
-  }
-
-  template <typename U>
-  RefPtr(RefPtr<U>&& other) noexcept : ptr_(other.ptr_) {
-    other.ptr_ = nullptr;
+      AddRef(ptr_);
   }
 
   ~RefPtr() {
     if (ptr_)
-      ptr_->Release();
+      Release(ptr_);
   }
 
-  RefPtr& operator=(T* p) { return *this = RefPtr(p); }
+  // Copy constructor. This is required in addition to the copy conversion
+  // constructor below.
+  RefPtr(const RefPtr& r) : RefPtr(r.ptr_) {}
 
-  RefPtr& operator=(std::nullptr_t) {
-    reset();
-    return *this;
-  }
+  // Copy conversion constructor.
+  template <typename U,
+            typename = typename std::enable_if<
+                std::is_convertible<U*, T*>::value>::type>
+  RefPtr(const RefPtr<U>& r) : RefPtr(r.ptr_) {}
 
-  RefPtr& operator=(RefPtr r) noexcept {
-    swap(r);
-    return *this;
+  // Move constructor. This is required in addition to the move conversion
+  // constructor below.
+  RefPtr(RefPtr&& r) noexcept : ptr_(r.ptr_) { r.ptr_ = nullptr; }
+
+  // Move conversion constructor.
+  template <typename U,
+            typename = typename std::enable_if<
+                std::is_convertible<U*, T*>::value>::type>
+  RefPtr(RefPtr<U>&& r) noexcept : ptr_(r.ptr_) {
+    r.ptr_ = nullptr;
   }
 
   T* get() const { return ptr_; }
   T& operator*() const { return *ptr_; }
   T* operator->() const { return ptr_; }
-  operator T*() const { return ptr_; }
-  explicit operator bool() const { return ptr_ != nullptr; }
 
-  void reset() { RefPtr().swap(*this); }
-  void swap(RefPtr& other) noexcept { std::swap(ptr_, other.ptr_); }
-
-  [[nodiscard]] T* release() {
-    T* ptr = ptr_;
-    ptr_ = nullptr;
-    return ptr;
+  RefPtr& operator=(T* p) { return *this = RefPtr(p); }
+  RefPtr& operator=(std::nullptr_t) {
+    reset();
+    return *this;
   }
 
+  // Unified assignment operator.
+  RefPtr& operator=(RefPtr r) noexcept {
+    swap(r);
+    return *this;
+  }
+
+  // Sets managed object to null and releases reference to the previous managed
+  // object, if it existed.
+  void reset() { RefPtr().swap(*this); }
+
+  // Returns the owned pointer (if any), releasing ownership to the caller. The
+  // caller is responsible for managing the lifetime of the reference.
+  [[nodiscard]] T* release();
+
+  void swap(RefPtr& r) noexcept { std::swap(ptr_, r.ptr_); }
+
+  explicit operator bool() const { return ptr_ != nullptr; }
+
+  template <typename U>
+  bool operator==(const RefPtr<U>& rhs) const {
+    return ptr_ == rhs.get();
+  }
+
+  template <typename U>
+  bool operator!=(const RefPtr<U>& rhs) const {
+    return !operator==(rhs);
+  }
+
+  template <typename U>
+  bool operator<(const RefPtr<U>& rhs) const {
+    return ptr_ < rhs.get();
+  }
+
+ protected:
+  T* ptr_ = nullptr;
+
  private:
+  // Friend required for move constructors that set r.ptr_ to null.
   template <typename U>
   friend class RefPtr;
 
-  T* ptr_ = nullptr;
+  static void AddRef(T* ptr);
+  static void Release(T* ptr);
 };
 
-// Comparison operators
-template <typename T, typename U>
-inline bool operator==(const RefPtr<T>& lhs, const RefPtr<U>& rhs) {
-  return lhs.get() == rhs.get();
+template <typename T>
+T* RefPtr<T>::release() {
+  T* ptr = ptr_;
+  ptr_ = nullptr;
+  return ptr;
+}
+
+// static
+template <typename T>
+void RefPtr<T>::AddRef(T* ptr) {
+  ptr->AddRef();
+}
+
+// static
+template <typename T>
+void RefPtr<T>::Release(T* ptr) {
+  ptr->Release();
 }
 
 template <typename T, typename U>
-inline bool operator!=(const RefPtr<T>& lhs, const RefPtr<U>& rhs) {
-  return lhs.get() != rhs.get();
+bool operator==(const RefPtr<T>& lhs, const U* rhs) {
+  return lhs.get() == rhs;
+}
+
+template <typename T, typename U>
+bool operator==(const T* lhs, const RefPtr<U>& rhs) {
+  return lhs == rhs.get();
 }
 
 template <typename T>
-inline bool operator==(const RefPtr<T>& lhs, std::nullptr_t) {
-  return lhs.get() == nullptr;
+bool operator==(const RefPtr<T>& lhs, std::nullptr_t null) {
+  return !static_cast<bool>(lhs);
 }
 
 template <typename T>
-inline bool operator==(std::nullptr_t, const RefPtr<T>& rhs) {
-  return rhs.get() == nullptr;
+bool operator==(std::nullptr_t null, const RefPtr<T>& rhs) {
+  return !static_cast<bool>(rhs);
+}
+
+template <typename T, typename U>
+bool operator!=(const RefPtr<T>& lhs, const U* rhs) {
+  return !operator==(lhs, rhs);
+}
+
+template <typename T, typename U>
+bool operator!=(const T* lhs, const RefPtr<U>& rhs) {
+  return !operator==(lhs, rhs);
+}
+
+template <typename T>
+bool operator!=(const RefPtr<T>& lhs, std::nullptr_t null) {
+  return !operator==(lhs, null);
+}
+
+template <typename T>
+bool operator!=(std::nullptr_t null, const RefPtr<T>& rhs) {
+  return !operator==(null, rhs);
+}
+
+template <typename T>
+std::ostream& operator<<(std::ostream& out, const RefPtr<T>& p) {
+  return out << p.get();
+}
+
+template <typename T>
+void swap(RefPtr<T>& lhs, RefPtr<T>& rhs) noexcept {
+  lhs.swap(rhs);
 }
 
 // Constructs an instance of T, which is a ref counted type, and wraps the

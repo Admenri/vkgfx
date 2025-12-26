@@ -5,8 +5,8 @@
 #ifndef GFX_GFX_SURFACE_H_
 #define GFX_GFX_SURFACE_H_
 
-#include "gfx/backend_config.h"
 #include "gfx/common/refptr.h"
+#include "gfx/gfx_config.h"
 
 struct WGPUSurfaceImpl {};
 

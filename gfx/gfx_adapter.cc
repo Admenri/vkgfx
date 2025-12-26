@@ -4,9 +4,6 @@
 
 #include "gfx/gfx_adapter.h"
 
-#include <array>
-#include <span>
-
 #include "gfx/common/constants.h"
 #include "gfx/common/log.h"
 #include "gfx/gfx_device.h"
@@ -43,7 +40,7 @@ GFXAdapter::GFXAdapter(VkPhysicalDevice adapter) : adapter_(adapter) {
 }
 
 void GFXAdapter::ConfigureSupportedExtensions() {
-  // Extensions
+  // Extensions check
   uint32_t extension_count = 0;
   vkEnumerateDeviceExtensionProperties(adapter_, nullptr, &extension_count,
                                        nullptr);
@@ -51,15 +48,10 @@ void GFXAdapter::ConfigureSupportedExtensions() {
   vkEnumerateDeviceExtensionProperties(adapter_, nullptr, &extension_count,
                                        available_extensions.data());
 
-  for (const auto& ext : available_extensions) {
-    auto iter = std::find(kDeviceExtensions.begin(), kDeviceExtensions.end(),
-                          [&](const DeviceExtInfo& it) {
-                            return !std::strcmp(it.name, ext.extensionName);
-                          });
-
-    if (iter != kDeviceExtensions.end())
-      extensions_[static_cast<size_t>(iter->ext)] = VK_TRUE;
-  }
+  for (const auto& ext : available_extensions)
+    for (size_t i = 0; i < kDeviceExtensions.size(); ++i)
+      if (!std::strcmp(kDeviceExtensions[i].name, ext.extensionName))
+        extensions_[kDeviceExtensions[i].ext] = VK_TRUE;
 
   // Properties
   device_info_.properties = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
@@ -340,6 +332,7 @@ WGPUFuture GFXAdapter::RequestDevice(
   DeviceFeatures features_knobs = {};
   VkPhysicalDeviceFeatures2 enabled_features = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+  enabled_features.features = device_info_.features.features;
   NextChainBuilder features_chain(&enabled_features);
 
   if (descriptor && descriptor->requiredFeatures) {
@@ -490,11 +483,27 @@ WGPUFuture GFXAdapter::RequestDevice(
   vkCreateDevice(adapter_, &create_info, nullptr, &device);
 
   GFXDevice* device_impl = nullptr;
-  if (device)
-    device_impl = new GFXDevice(device);
+  if (device) {
+    std::string device_label = "VkGFX.Device";
+    if (descriptor && descriptor->label.data)
+      device_label =
+          std::string(descriptor->label.data, descriptor->label.length);
+
+    WGPUDeviceLostCallbackInfo device_lost_callback = {};
+    if (descriptor)
+      device_lost_callback = descriptor->deviceLostCallbackInfo;
+
+    WGPUUncapturedErrorCallbackInfo uncaptured_error_callback = {};
+    if (descriptor)
+      uncaptured_error_callback = descriptor->uncapturedErrorCallbackInfo;
+
+    device_impl = new GFXDevice(device_label, device, device_lost_callback,
+                                uncaptured_error_callback);
+  }
 
   WGPUStringView message = {};
-  callbackInfo.callback(WGPURequestDeviceStatus_Success, device_impl, message,
+  callbackInfo.callback(WGPURequestDeviceStatus_Success,
+                        AdaptExternalRefCounted(device_impl), message,
                         callbackInfo.userdata1, callbackInfo.userdata2);
 
   return GFXInstance::kImmediateFuture;

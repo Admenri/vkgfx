@@ -9,6 +9,7 @@
 
 #include "gfx/common/log.h"
 #include "gfx/gfx_adapter.h"
+#include "gfx/gfx_utils.h"
 
 namespace vkgfx {
 
@@ -20,7 +21,7 @@ GFXInstance::GFXInstance(VkInstance instance,
     : instance_(instance), debug_messenger_(debug_messenger) {}
 
 GFXInstance::~GFXInstance() {
-  if (debug_messenger_)
+  if (instance_ && debug_messenger_)
     vkDestroyDebugUtilsMessengerEXT(instance_, debug_messenger_, nullptr);
   if (instance_)
     vkDestroyInstance(instance_, nullptr);
@@ -49,20 +50,20 @@ void GFXInstance::ProcessEvents() {
 WGPUFuture GFXInstance::RequestAdapter(
     WGPURequestAdapterOptions const* options,
     WGPURequestAdapterCallbackInfo callbackInfo) {
-  if (!callbackInfo.callback)
+  if (!callbackInfo.callback) {
+    GFX_ERROR() << __FUNCTION__ << ": callback is null.";
     return kInvalidFuture;
+  }
 
   uint32_t adapter_count = 0;
-  VkResult count_result =
-      vkEnumeratePhysicalDevices(instance_, &adapter_count, nullptr);
-  if (count_result != VK_SUCCESS)
-    return kInvalidFuture;
-
+  vkEnumeratePhysicalDevices(instance_, &adapter_count, nullptr);
   std::vector<VkPhysicalDevice> physical_devices(adapter_count);
-  VkResult enum_result = vkEnumeratePhysicalDevices(instance_, &adapter_count,
-                                                    physical_devices.data());
-  if (count_result != VK_SUCCESS)
+  vkEnumeratePhysicalDevices(instance_, &adapter_count,
+                             physical_devices.data());
+  if (!adapter_count) {
+    GFX_ERROR() << __FUNCTION__ << ": no adapters found.";
     return kInvalidFuture;
+  }
 
   for (uint32_t i = 0; i < adapter_count; ++i) {
     VkPhysicalDevice vk_adapter = physical_devices[i];
@@ -79,9 +80,6 @@ WGPUFuture GFXInstance::RequestAdapter(
     GFX_INFO() << "[DeviceID] " << device_properties.deviceID;
     GFX_INFO() << "[DeviceType] " << device_properties.deviceType;
     GFX_INFO() << "[DeviceName] " << device_properties.deviceName;
-
-    VkPhysicalDeviceFeatures device_features;
-    vkGetPhysicalDeviceFeatures(vk_adapter, &device_features);
   }
 
   // TODO: select adapter based on options
@@ -90,7 +88,8 @@ WGPUFuture GFXInstance::RequestAdapter(
     adapter_impl = new GFXAdapter(physical_devices[0]);
 
   WGPUStringView message = {};
-  callbackInfo.callback(WGPURequestAdapterStatus_Success, adapter_impl, message,
+  callbackInfo.callback(WGPURequestAdapterStatus_Success,
+                        AdaptExternalRefCounted(adapter_impl), message,
                         callbackInfo.userdata1, callbackInfo.userdata2);
 
   return kImmediateFuture;

@@ -5,10 +5,12 @@
 #ifndef GFX_GFX_ADAPTER_H_
 #define GFX_GFX_ADAPTER_H_
 
+#include <array>
+#include <span>
 #include <vector>
 
-#include "gfx/backend_config.h"
 #include "gfx/common/refptr.h"
+#include "gfx/gfx_config.h"
 
 struct WGPUAdapterImpl {};
 
@@ -87,4 +89,4 @@ class GFXAdapter : public RefCounted<GFXAdapter>, public WGPUAdapterImpl {
 
 }  // namespace vkgfx
 
-#endif  // !GFX_GFX_ADAPTER_H_
+#endif  // GFX_GFX_ADAPTER_H_
