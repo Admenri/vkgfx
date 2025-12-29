@@ -9,12 +9,14 @@ namespace vkgfx {
 ///////////////////////////////////////////////////////////////////////////////
 // GFXDevice Implement
 
-GFXDevice::GFXDevice(const std::string& label,
-                     VkDevice device,
+GFXDevice::GFXDevice(VkDevice device,
+                     RefPtr<GFXAdapter> adapter,
+                     const std::string& label,
                      WGPUDeviceLostCallbackInfo device_lost_callback,
                      WGPUUncapturedErrorCallbackInfo uncaptured_error_callback)
-    : label_(label),
-      device_(device),
+    : device_(device),
+      adapter_(adapter),
+      label_(label),
       device_lost_callback_(device_lost_callback),
       uncaptured_error_callback_(uncaptured_error_callback) {}
 
@@ -92,6 +94,8 @@ WGPUTexture GFXDevice::CreateTexture(WGPUTextureDescriptor const* descriptor) {
 }
 
 void GFXDevice::Destroy() {
+  adapter_.reset();
+
   if (device_) {
     vkDestroyDevice(device_, nullptr);
     device_ = VK_NULL_HANDLE;
@@ -130,6 +134,8 @@ void GFXDevice::PushErrorScope(WGPUErrorFilter filter) {}
 void GFXDevice::SetLabel(WGPUStringView label) {
   label_ = std::string(label.data, label.length);
 }
+
+}  // namespace vkgfx
 
 ///////////////////////////////////////////////////////////////////////////////
 // Member Function
@@ -294,5 +300,3 @@ GFX_EXPORT void GFX_FUNCTION(DeviceSetLabel)(WGPUDevice device,
   auto* self = static_cast<vkgfx::GFXDevice*>(device);
   self->SetLabel(label);
 }
-
-}  // namespace vkgfx

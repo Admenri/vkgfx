@@ -7,18 +7,24 @@
 
 #include "gfx/common/refptr.h"
 #include "gfx/gfx_config.h"
+#include "gfx/gfx_instance.h"
 
 struct WGPUSurfaceImpl {};
 
 namespace vkgfx {
 
-// https://gpuweb.github.io/gpuweb/
+// https://gpuweb.github.io/gpuweb/#gpu
 class GFXSurface : public RefCounted<GFXSurface>, public WGPUSurfaceImpl {
  public:
+  GFXSurface(VkSurfaceKHR surface,
+             RefPtr<GFXInstance> instance,
+             const std::string& label);
   ~GFXSurface();
 
   GFXSurface(const GFXSurface&) = delete;
   GFXSurface& operator=(const GFXSurface&) = delete;
+
+  VkSurfaceKHR GetVkHandle() const { return surface_; }
 
   void Configure(WGPUSurfaceConfiguration const* config);
   WGPUStatus GetCapabilities(WGPUAdapter adapter,
@@ -29,12 +35,11 @@ class GFXSurface : public RefCounted<GFXSurface>, public WGPUSurfaceImpl {
   void Unconfigure();
 
  private:
-  friend class GFXInstance;
-  GFXSurface(RefPtr<GFXInstance> instance, VkSurfaceKHR surface);
+  VkSurfaceKHR surface_;
 
   RefPtr<GFXInstance> instance_;
 
-  VkSurfaceKHR surface_;
+  std::string label_;
 };
 
 }  // namespace vkgfx

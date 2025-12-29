@@ -16,9 +16,10 @@ struct WGPUAdapterImpl {};
 
 namespace vkgfx {
 
-// https://gpuweb.github.io/gpuweb/#adapter
+// https://gpuweb.github.io/gpuweb/#gpuadapter
 class GFXAdapter : public RefCounted<GFXAdapter>, public WGPUAdapterImpl {
  public:
+  GFXAdapter(VkPhysicalDevice adapter);
   ~GFXAdapter();
 
   GFXAdapter(const GFXAdapter&) = delete;
@@ -33,6 +34,8 @@ class GFXAdapter : public RefCounted<GFXAdapter>, public WGPUAdapterImpl {
     kExtensionNums,
   };
 
+  VkPhysicalDevice GetVkHandle() const { return adapter_; }
+
   void GetFeatures(WGPUSupportedFeatures* features);
   WGPUStatus GetInfo(WGPUAdapterInfo* info);
   WGPUStatus GetLimits(WGPULimits* limits);
@@ -41,9 +44,6 @@ class GFXAdapter : public RefCounted<GFXAdapter>, public WGPUAdapterImpl {
                            WGPURequestDeviceCallbackInfo callbackInfo);
 
  private:
-  friend class GFXInstance;
-  GFXAdapter(VkPhysicalDevice adapter);
-
   void ConfigureSupportedExtensions();
   std::vector<WGPUFeatureName> GetAdapterFeatures();
   void GetDeviceQueueFamilies();

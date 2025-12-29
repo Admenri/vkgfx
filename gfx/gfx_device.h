@@ -8,19 +8,27 @@
 #include <string>
 
 #include "gfx/common/refptr.h"
+#include "gfx/gfx_adapter.h"
 #include "gfx/gfx_config.h"
 
 struct WGPUDeviceImpl {};
 
 namespace vkgfx {
 
-// https://gpuweb.github.io/gpuweb/#device
+// https://gpuweb.github.io/gpuweb/#gpudevice
 class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
  public:
+  GFXDevice(VkDevice device,
+            RefPtr<GFXAdapter> adapter,
+            const std::string& label,
+            WGPUDeviceLostCallbackInfo device_lost_callback,
+            WGPUUncapturedErrorCallbackInfo uncaptured_error_callback);
   ~GFXDevice();
 
   GFXDevice(const GFXDevice&) = delete;
   GFXDevice& operator=(const GFXDevice&) = delete;
+
+  VkDevice GetVkHandle() const { return device_; }
 
   WGPUBindGroup CreateBindGroup(WGPUBindGroupDescriptor const* descriptor);
   WGPUBindGroupLayout CreateBindGroupLayout(
@@ -59,14 +67,11 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
   void SetLabel(WGPUStringView label);
 
  private:
-  friend class GFXAdapter;
-  GFXDevice(const std::string& label,
-            VkDevice device,
-            WGPUDeviceLostCallbackInfo device_lost_callback,
-            WGPUUncapturedErrorCallbackInfo uncaptured_error_callback);
+  VkDevice device_;
+
+  RefPtr<GFXAdapter> adapter_;
 
   std::string label_;
-  VkDevice device_;
   WGPUDeviceLostCallbackInfo device_lost_callback_;
   WGPUUncapturedErrorCallbackInfo uncaptured_error_callback_;
 };

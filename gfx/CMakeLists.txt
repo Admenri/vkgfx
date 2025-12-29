@@ -1,12 +1,11 @@
 cmake_minimum_required(VERSION 3.21)
 
 set(VKGFX_GFX_SRC
-  common/constants.h
   common/log.cc
   common/log.h
   common/platform.h
   common/refptr.h
-  backend_config.h
+  gfx_config.h
   gfx_adapter.cc
   gfx_adapter.h
   gfx_bind_group.cc

@@ -120,7 +120,7 @@ GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
     return nullptr;
   }
 
-  if (volkGetLoadedInstance() != VK_NULL_HANDLE)
+  if (volkGetLoadedInstance() == VK_NULL_HANDLE)
     volkLoadInstance(instance);
 
   VkDebugUtilsMessengerEXT debug_messenger;
@@ -141,8 +141,7 @@ void GetInstanceFeatures(WGPUSupportedInstanceFeatures* features) {
 // static
 WGPUStatus GetInstanceLimits(WGPUInstanceLimits* limits) {
   if (limits->nextInChain) {
-    GFX_ERROR() << __FUNCTION__
-                << ": unsupported chained struct in GetInstanceLimits.";
+    GFX_ERROR() << __FUNCTION__ << ": unsupported chained struct.";
     return WGPUStatus_Error;
   }
 

@@ -11,12 +11,14 @@ namespace vkgfx {
 ///////////////////////////////////////////////////////////////////////////////
 // GFXSurface Implement
 
-GFXSurface::GFXSurface(RefPtr<GFXInstance> instance, VkSurfaceKHR surface)
-    : instance_(instance), surface_(surface) {}
+GFXSurface::GFXSurface(VkSurfaceKHR surface,
+                       RefPtr<GFXInstance> instance,
+                       const std::string& label)
+    : surface_(surface), instance_(instance), label_(label) {}
 
 GFXSurface::~GFXSurface() {
-  if (surface_)
-    vkDestroySurfaceKHR(**instance_, surface_, nullptr);
+  if (surface_ && instance_)
+    vkDestroySurfaceKHR(instance_->GetVkHandle(), surface_, nullptr);
 }
 
 void GFXSurface::Configure(WGPUSurfaceConfiguration const* config) {}
@@ -32,9 +34,13 @@ WGPUStatus GFXSurface::Present() {
   return WGPUStatus();
 }
 
-void GFXSurface::SetLabel(WGPUStringView label) {}
+void GFXSurface::SetLabel(WGPUStringView label) {
+  label_ = std::string(label.data, label.length);
+}
 
 void GFXSurface::Unconfigure() {}
+
+}  // namespace vkgfx
 
 ///////////////////////////////////////////////////////////////////////////////
 // Member Function
@@ -78,5 +84,3 @@ GFX_EXPORT void GFX_FUNCTION(SurfaceUnconfigure)(WGPUSurface surface) {
   auto* self = static_cast<vkgfx::GFXSurface*>(surface);
   self->Unconfigure();
 }
-
-}  // namespace vkgfx

@@ -4,7 +4,6 @@
 
 #include "gfx/gfx_adapter.h"
 
-#include "gfx/common/constants.h"
 #include "gfx/common/log.h"
 #include "gfx/gfx_device.h"
 #include "gfx/gfx_instance.h"
@@ -77,6 +76,12 @@ void GFXAdapter::ConfigureSupportedExtensions() {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES};
   device_info_.subgroup_size_control_features = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES};
+  device_info_.shader_subgroup_extended_types_features = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES};
+  device_info_.shader_demote_to_helper_invocation_features = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT};
+  device_info_.shader_integer_dot_product_features = {
+      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES_KHR};
 
   NextChainBuilder features_chain_builder(&device_info_.features);
   features_chain_builder.Add(&device_info_.shader_16bit_storage_features);
@@ -216,7 +221,7 @@ WGPUStatus GFXAdapter::GetLimits(WGPULimits* limits) {
   limits->minStorageBufferOffsetAlignment =
       device_properties.limits.minStorageBufferOffsetAlignment;
   limits->maxVertexBuffers = device_properties.limits.maxVertexInputBindings;
-  limits->maxBufferSize = kAssumedMaxBufferSize;
+  limits->maxBufferSize = std::numeric_limits<uint32_t>::max();
   limits->maxVertexAttributes =
       device_properties.limits.maxVertexInputAttributes;
   limits->maxVertexBufferArrayStride =
@@ -242,7 +247,7 @@ WGPUStatus GFXAdapter::GetLimits(WGPULimits* limits) {
       device_properties.limits.maxComputeWorkGroupCount[1],
       device_properties.limits.maxComputeWorkGroupCount[2],
   });
-  limits->maxImmediateSize = kMaxImmediateDataBytes;
+  limits->maxImmediateSize = device_properties.limits.maxPushConstantsSize;
 
   return WGPUStatus_Success;
 }
@@ -256,13 +261,13 @@ WGPUBool GFXAdapter::HasFeature(WGPUFeatureName feature) {
 WGPUFuture GFXAdapter::RequestDevice(
     WGPU_NULLABLE WGPUDeviceDescriptor const* descriptor,
     WGPURequestDeviceCallbackInfo callbackInfo) {
-  if (!callbackInfo.callback) {
-    GFX_ERROR() << __FUNCTION__ << ": callbackInfo.callback is null.";
+  if (descriptor && descriptor->nextInChain) {
+    GFX_ERROR() << __FUNCTION__ << ": descriptor->nextInChain is not null.";
     return GFXInstance::kInvalidFuture;
   }
 
-  if (descriptor && descriptor->nextInChain) {
-    GFX_ERROR() << __FUNCTION__ << ": descriptor->nextInChain is not null.";
+  if (!callbackInfo.callback) {
+    GFX_ERROR() << __FUNCTION__ << ": callbackInfo.callback is null.";
     return GFXInstance::kInvalidFuture;
   }
 
@@ -333,10 +338,11 @@ WGPUFuture GFXAdapter::RequestDevice(
   VkPhysicalDeviceFeatures2 enabled_features = {
       VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
   enabled_features.features = device_info_.features.features;
-  NextChainBuilder features_chain(&enabled_features);
 
   if (descriptor && descriptor->requiredFeatures) {
-    std::span<const WGPUFeatureName> required_features(
+    NextChainBuilder features_chain(&enabled_features);
+
+    const std::span<const WGPUFeatureName> required_features(
         descriptor->requiredFeatures, descriptor->requiredFeatureCount);
 
 #define CHECK_FEATURE(name)                                     \
@@ -484,7 +490,8 @@ WGPUFuture GFXAdapter::RequestDevice(
 
   GFXDevice* device_impl = nullptr;
   if (device) {
-    std::string device_label = "VkGFX.Device";
+    std::string device_label =
+        "VkDevice_" + std::to_string(reinterpret_cast<uint64_t>(device));
     if (descriptor && descriptor->label.data)
       device_label =
           std::string(descriptor->label.data, descriptor->label.length);
@@ -497,8 +504,9 @@ WGPUFuture GFXAdapter::RequestDevice(
     if (descriptor)
       uncaptured_error_callback = descriptor->uncapturedErrorCallbackInfo;
 
-    device_impl = new GFXDevice(device_label, device, device_lost_callback,
-                                uncaptured_error_callback);
+    device_impl =
+        new GFXDevice(device, this, device_label, device_lost_callback,
+                      uncaptured_error_callback);
   }
 
   WGPUStringView message = {};

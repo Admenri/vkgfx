@@ -23,13 +23,13 @@ class GFXInstance : public RefCounted<GFXInstance>, public WGPUInstanceImpl {
       std::numeric_limits<uint64_t>::max(),
   };
 
+  GFXInstance(VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger);
   ~GFXInstance();
 
   GFXInstance(const GFXInstance&) = delete;
   GFXInstance& operator=(const GFXInstance&) = delete;
 
-  VkInstance operator*() { return instance_; }
-  VkInstance operator*() const { return instance_; }
+  VkInstance GetVkHandle() const { return instance_; }
 
   WGPUSurface CreateSurface(WGPUSurfaceDescriptor const* descriptor);
   void GetWGSLLanguageFeatures(WGPUSupportedWGSLLanguageFeatures* features);
@@ -42,10 +42,8 @@ class GFXInstance : public RefCounted<GFXInstance>, public WGPUInstanceImpl {
                          uint64_t timeoutNS);
 
  private:
-  friend GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor);
-  GFXInstance(VkInstance instance, VkDebugUtilsMessengerEXT debug_messenger);
-
   VkInstance instance_;
+
   VkDebugUtilsMessengerEXT debug_messenger_;
 };
 
