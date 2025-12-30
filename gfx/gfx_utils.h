@@ -5,6 +5,7 @@
 #ifndef GFX_GFX_UTILS_H_
 #define GFX_GFX_UTILS_H_
 
+#include <functional>
 #include <string>
 #include <string_view>
 
@@ -66,6 +67,33 @@ class NextChainBuilder {
   void* operator new(size_t, void*) = delete;
 
   VkBaseOutStructure* current_;
+};
+
+// chained struct extractor
+class ChainedStructExtractor {
+ public:
+  explicit ChainedStructExtractor(WGPUChainedStruct* head) : root_(head) {}
+
+  ChainedStructExtractor(const ChainedStructExtractor&) = delete;
+  ChainedStructExtractor& operator=(const ChainedStructExtractor&) = delete;
+
+  template <typename Ty>
+  Ty* GetStruct(WGPUSType type) {
+    for (auto* current = root_; current; current = current->next)
+      if (current->sType == type)
+        return reinterpret_cast<Ty*>(current);
+  }
+
+  void VisitChain(const std::function<void(WGPUChainedStruct*)>& visitor) {
+    for (auto* current = root_; current; current = current->next)
+      visitor(current);
+  }
+
+ private:
+  void* operator new(size_t) = delete;
+  void* operator new(size_t, void*) = delete;
+
+  WGPUChainedStruct* root_;
 };
 
 }  // namespace vkgfx

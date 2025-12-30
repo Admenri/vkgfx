@@ -490,8 +490,7 @@ WGPUFuture GFXAdapter::RequestDevice(
 
   GFXDevice* device_impl = nullptr;
   if (device) {
-    std::string device_label =
-        "VkDevice_" + std::to_string(reinterpret_cast<uint64_t>(device));
+    std::string device_label = "GFX.Device";
     if (descriptor && descriptor->label.data)
       device_label =
           std::string(descriptor->label.data, descriptor->label.length);

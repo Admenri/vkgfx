@@ -8,7 +8,9 @@
 #include <vector>
 
 #include "gfx/common/log.h"
+#include "gfx/common/platform.h"
 #include "gfx/gfx_adapter.h"
+#include "gfx/gfx_surface.h"
 #include "gfx/gfx_utils.h"
 
 namespace vkgfx {
@@ -29,7 +31,36 @@ GFXInstance::~GFXInstance() {
 
 WGPUSurface GFXInstance::CreateSurface(
     WGPUSurfaceDescriptor const* descriptor) {
-  return WGPUSurface();
+  if (!descriptor)
+    return nullptr;
+
+  std::string label = "GFX.Surface";
+  if (descriptor->label.data && descriptor->label.length)
+    label = std::string(descriptor->label.data, descriptor->label.length);
+
+  ChainedStructExtractor chained_extractor(descriptor->nextInChain);
+  VkSurfaceKHR surface = VK_NULL_HANDLE;
+
+#if GFX_PLATFORM_IS(WIN32)
+  auto* surface_source_hwnd =
+      chained_extractor.GetStruct<WGPUSurfaceSourceWindowsHWND>(
+          WGPUSType_SurfaceSourceWindowsHWND);
+
+  VkWin32SurfaceCreateInfoKHR win32_create_info = {
+      VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
+  win32_create_info.hinstance =
+      reinterpret_cast<HINSTANCE>(surface_source_hwnd->hinstance);
+  win32_create_info.hwnd = reinterpret_cast<HWND>(surface_source_hwnd->hwnd);
+
+  vkCreateWin32SurfaceKHR(instance_, &win32_create_info, nullptr, &surface);
+#else
+#error Unsupport Platform Surface
+#endif
+
+  if (surface == VK_NULL_HANDLE)
+    return nullptr;
+
+  return AdaptExternalRefCounted(new GFXSurface(surface, this, label));
 }
 
 void GFXInstance::GetWGSLLanguageFeatures(
@@ -71,6 +102,8 @@ WGPUFuture GFXInstance::RequestAdapter(
     VkPhysicalDeviceProperties device_properties;
     vkGetPhysicalDeviceProperties(vk_adapter, &device_properties);
 
+    GFX_INFO() << "========================= Device " << i
+               << " ========================";
     GFX_INFO() << "[APIVersion] "
                << VK_API_VERSION_MAJOR(device_properties.apiVersion) << "."
                << VK_API_VERSION_MINOR(device_properties.apiVersion) << "."
@@ -80,6 +113,7 @@ WGPUFuture GFXInstance::RequestAdapter(
     GFX_INFO() << "[DeviceID] " << device_properties.deviceID;
     GFX_INFO() << "[DeviceType] " << device_properties.deviceType;
     GFX_INFO() << "[DeviceName] " << device_properties.deviceName;
+    GFX_INFO() << "===========================================================";
   }
 
   // TODO: select adapter based on options

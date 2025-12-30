@@ -34,15 +34,8 @@ VKAPI_ATTR VkBool32 VKAPI_CALL OnInstanceCreationDebugUtilsCallback(
     VkDebugUtilsMessageTypeFlagsEXT messageTypes,
     const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
     void* pUserData) {
-  GFX_DEBUG() << "[VkDebugUtils] " << pCallbackData->pMessage;
+  GFX_DEBUG() << "[DebugUtils] " << pCallbackData->pMessage;
   return VK_FALSE;
-}
-
-bool InitializeVolkLoader() {
-  static VkResult volk_result = VK_NOT_READY;
-  static std::once_flag volk_init_flag;
-  std::call_once(volk_init_flag, [&]() { volk_result = volkInitialize(); });
-  return volk_result == VK_SUCCESS;
 }
 
 }  // namespace
@@ -52,9 +45,11 @@ bool InitializeVolkLoader() {
 
 // static
 GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
-  if (!InitializeVolkLoader()) {
-    GFX_ERROR() << __FUNCTION__ << ": failed to initialize volk loader.";
-    return nullptr;
+  if (volkGetLoadedInstance() == VK_NULL_HANDLE) {
+    if (volkInitialize() != VK_SUCCESS) {
+      GFX_ERROR() << __FUNCTION__ << ": Failed to initialize volk loader.";
+      return nullptr;
+    }
   }
 
   uint32_t instance_version = 0;
@@ -69,7 +64,7 @@ GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
   std::vector<VkLayerProperties> available_layers(layer_count);
   vkEnumerateInstanceLayerProperties(&layer_count, available_layers.data());
   for (const auto& layer : available_layers) {
-    GFX_INFO() << "Available layer: " << layer.layerName;
+    GFX_INFO() << "[Instance] Layer: " << layer.layerName;
   }
 
   uint32_t extension_count;
@@ -78,7 +73,7 @@ GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
   vkEnumerateInstanceExtensionProperties(nullptr, &extension_count,
                                          available_extensions.data());
   for (const auto& extension : available_extensions) {
-    GFX_INFO() << "Available extension: " << extension.extensionName;
+    GFX_INFO() << "[Instance] Extension: " << extension.extensionName;
   }
 
   // Vulkan 1.1 required
@@ -116,7 +111,7 @@ GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
 
   VkInstance instance;
   if (vkCreateInstance(&create_info, nullptr, &instance) != VK_SUCCESS) {
-    GFX_ERROR() << "Failed to create Vulkan instance.";
+    GFX_ERROR() << __FUNCTION__ << ": Failed to create Vulkan instance.";
     return nullptr;
   }
 
@@ -173,10 +168,8 @@ void AdapterInfoFreeMembers(WGPUAdapterInfo adapterInfo) {
 
 // static
 void SupportedFeaturesFreeMembers(WGPUSupportedFeatures supportedFeatures) {
-  if (!supportedFeatures.features)
-    return;
-
-  delete[] supportedFeatures.features;
+  if (supportedFeatures.features)
+    delete[] supportedFeatures.features;
 }
 
 // static
@@ -193,7 +186,14 @@ void SupportedWGSLLanguageFeaturesFreeMembers(
 
 // static
 void SurfaceCapabilitiesFreeMembers(
-    WGPUSurfaceCapabilities surfaceCapabilities) {}
+    WGPUSurfaceCapabilities surfaceCapabilities) {
+  if (surfaceCapabilities.formats)
+    delete[] surfaceCapabilities.formats;
+  if (surfaceCapabilities.presentModes)
+    delete[] surfaceCapabilities.presentModes;
+  if (surfaceCapabilities.alphaModes)
+    delete[] surfaceCapabilities.alphaModes;
+}
 
 }  // namespace vkgfx
 
