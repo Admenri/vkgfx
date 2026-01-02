@@ -15,8 +15,11 @@ namespace vkgfx {
 
 GFXSurface::GFXSurface(VkSurfaceKHR surface,
                        RefPtr<GFXInstance> instance,
-                       const std::string& label)
-    : surface_(surface), instance_(instance), label_(label) {}
+                       WGPUStringView label)
+    : surface_(surface), instance_(instance) {
+  if (label.data && label.length)
+    label_ = std::string(label.data, label.length);
+}
 
 GFXSurface::~GFXSurface() {
   if (surface_ && instance_)

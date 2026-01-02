@@ -11,6 +11,7 @@
 
 #include "gfx/common/refptr.h"
 #include "gfx/gfx_config.h"
+#include "gfx/gfx_instance.h"
 
 struct WGPUAdapterImpl {};
 
@@ -19,12 +20,6 @@ namespace vkgfx {
 // https://gpuweb.github.io/gpuweb/#gpuadapter
 class GFXAdapter : public RefCounted<GFXAdapter>, public WGPUAdapterImpl {
  public:
-  GFXAdapter(VkPhysicalDevice adapter);
-  ~GFXAdapter();
-
-  GFXAdapter(const GFXAdapter&) = delete;
-  GFXAdapter& operator=(const GFXAdapter&) = delete;
-
   enum DeviceExtension {
     kSubgroupSizeControl,             // promoted to 1.3
     kShaderFloat16Int8,               // promoted to 1.2
@@ -33,22 +28,6 @@ class GFXAdapter : public RefCounted<GFXAdapter>, public WGPUAdapterImpl {
     kShaderIntegerDotProduct,         // promoted to 1.3
     kExtensionNums,
   };
-
-  VkPhysicalDevice GetVkHandle() const { return adapter_; }
-
-  void GetFeatures(WGPUSupportedFeatures* features);
-  WGPUStatus GetInfo(WGPUAdapterInfo* info);
-  WGPUStatus GetLimits(WGPULimits* limits);
-  WGPUBool HasFeature(WGPUFeatureName feature);
-  WGPUFuture RequestDevice(WGPU_NULLABLE WGPUDeviceDescriptor const* descriptor,
-                           WGPURequestDeviceCallbackInfo callbackInfo);
-
- private:
-  void ConfigureSupportedExtensions();
-  std::vector<WGPUFeatureName> GetAdapterFeatures();
-  void GetDeviceQueueFamilies();
-
-  VkPhysicalDevice adapter_;
 
   struct DeviceProperties {
     // Core 1.1
@@ -80,8 +59,37 @@ class GFXAdapter : public RefCounted<GFXAdapter>, public WGPUAdapterImpl {
         shader_integer_dot_product_features;
   };
 
-  struct DeviceInfo : public DeviceProperties, public DeviceFeatures {
-  } device_info_;
+  struct DeviceInfo : public DeviceProperties, public DeviceFeatures {};
+
+  GFXAdapter(VkPhysicalDevice adapter, RefPtr<GFXInstance> instance);
+  ~GFXAdapter();
+
+  GFXAdapter(const GFXAdapter&) = delete;
+  GFXAdapter& operator=(const GFXAdapter&) = delete;
+
+  VkPhysicalDevice GetVkHandle() const { return adapter_; }
+
+  RefPtr<GFXInstance> GetInstance() const { return instance_; }
+  const DeviceInfo& GetDeviceInfo() const { return device_info_; }
+
+ public:
+  void GetFeatures(WGPUSupportedFeatures* features);
+  WGPUStatus GetInfo(WGPUAdapterInfo* info);
+  WGPUStatus GetLimits(WGPULimits* limits);
+  WGPUBool HasFeature(WGPUFeatureName feature);
+  WGPUFuture RequestDevice(WGPU_NULLABLE WGPUDeviceDescriptor const* descriptor,
+                           WGPURequestDeviceCallbackInfo callbackInfo);
+
+ private:
+  void ConfigureSupportedExtensions();
+  std::vector<WGPUFeatureName> GetAdapterFeatures();
+  void GetDeviceQueueFamilies();
+
+  VkPhysicalDevice adapter_;
+
+  RefPtr<GFXInstance> instance_;
+
+  DeviceInfo device_info_;
 
   std::array<VkBool32, kExtensionNums> extensions_{false};
   std::vector<VkQueueFamilyProperties> queue_families_;

@@ -34,10 +34,6 @@ WGPUSurface GFXInstance::CreateSurface(
   if (!descriptor)
     return nullptr;
 
-  std::string label = "GFX.Surface";
-  if (descriptor->label.data && descriptor->label.length)
-    label = std::string(descriptor->label.data, descriptor->label.length);
-
   ChainedStructExtractor chained_extractor(descriptor->nextInChain);
   VkSurfaceKHR surface = VK_NULL_HANDLE;
 
@@ -60,7 +56,8 @@ WGPUSurface GFXInstance::CreateSurface(
   if (surface == VK_NULL_HANDLE)
     return nullptr;
 
-  return AdaptExternalRefCounted(new GFXSurface(surface, this, label));
+  return AdaptExternalRefCounted(
+      new GFXSurface(surface, this, descriptor->label));
 }
 
 void GFXInstance::GetWGSLLanguageFeatures(
@@ -119,7 +116,7 @@ WGPUFuture GFXInstance::RequestAdapter(
   // TODO: select adapter based on options
   GFXAdapter* adapter_impl = nullptr;
   if (adapter_count)
-    adapter_impl = new GFXAdapter(physical_devices[0]);
+    adapter_impl = new GFXAdapter(physical_devices[0], this);
 
   WGPUStringView message = {};
   callbackInfo.callback(WGPURequestAdapterStatus_Success,

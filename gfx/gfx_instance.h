@@ -31,6 +31,7 @@ class GFXInstance : public RefCounted<GFXInstance>, public WGPUInstanceImpl {
 
   VkInstance GetVkHandle() const { return instance_; }
 
+ public:
   WGPUSurface CreateSurface(WGPUSurfaceDescriptor const* descriptor);
   void GetWGSLLanguageFeatures(WGPUSupportedWGSLLanguageFeatures* features);
   WGPUBool HasWGSLLanguageFeature(WGPUWGSLLanguageFeatureName feature);

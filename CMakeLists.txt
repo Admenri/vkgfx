@@ -22,7 +22,10 @@ else()
   message(FATAL_ERROR "Unsupported platform")
 endif()
 
+include_directories(third_party)
+
 add_subdirectory(third_party/volk)
+add_subdirectory(third_party/vma)
 add_subdirectory(third_party/webgpu-cpp)
 
 add_subdirectory(gfx)

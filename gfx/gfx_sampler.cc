@@ -13,8 +13,11 @@ namespace vkgfx {
 
 GFXSampler::GFXSampler(VkSampler sampler,
                        RefPtr<GFXDevice> device,
-                       const std::string& label)
-    : sampler_(sampler), device_(device), label_(label) {}
+                       WGPUStringView label)
+    : sampler_(sampler), device_(device) {
+  if (label.data && label.length)
+    label_ = std::string(label.data, label.length);
+}
 
 GFXSampler::~GFXSampler() {
   if (sampler_)

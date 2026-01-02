@@ -16,9 +16,7 @@ namespace vkgfx {
 // https://gpuweb.github.io/gpuweb/#gpusampler
 class GFXSampler : public RefCounted<GFXSampler>, public WGPUSamplerImpl {
  public:
-  GFXSampler(VkSampler sampler,
-             RefPtr<GFXDevice> device,
-             const std::string& label);
+  GFXSampler(VkSampler sampler, RefPtr<GFXDevice> device, WGPUStringView label);
   ~GFXSampler();
 
   GFXSampler(const GFXSampler&) = delete;
@@ -31,7 +29,7 @@ class GFXSampler : public RefCounted<GFXSampler>, public WGPUSamplerImpl {
 
   RefPtr<GFXDevice> device_;
 
-  std::string label_;
+  std::string label_ = "GFX.Sampler";
 };
 
 }  // namespace vkgfx

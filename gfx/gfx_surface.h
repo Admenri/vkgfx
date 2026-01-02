@@ -18,7 +18,7 @@ class GFXSurface : public RefCounted<GFXSurface>, public WGPUSurfaceImpl {
  public:
   GFXSurface(VkSurfaceKHR surface,
              RefPtr<GFXInstance> instance,
-             const std::string& label);
+             WGPUStringView label);
   ~GFXSurface();
 
   GFXSurface(const GFXSurface&) = delete;
@@ -26,6 +26,7 @@ class GFXSurface : public RefCounted<GFXSurface>, public WGPUSurfaceImpl {
 
   VkSurfaceKHR GetVkHandle() const { return surface_; }
 
+ public:
   void Configure(WGPUSurfaceConfiguration const* config);
   WGPUStatus GetCapabilities(WGPUAdapter adapter,
                              WGPUSurfaceCapabilities* capabilities);
@@ -39,7 +40,7 @@ class GFXSurface : public RefCounted<GFXSurface>, public WGPUSurfaceImpl {
 
   RefPtr<GFXInstance> instance_;
 
-  std::string label_;
+  std::string label_ = "GFX.Surface";
 };
 
 }  // namespace vkgfx

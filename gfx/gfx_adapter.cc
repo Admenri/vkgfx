@@ -33,7 +33,8 @@ static constexpr std::array<DeviceExtInfo, GFXAdapter::kExtensionNums>
 ///////////////////////////////////////////////////////////////////////////////
 // GFXAdapter Implement
 
-GFXAdapter::GFXAdapter(VkPhysicalDevice adapter) : adapter_(adapter) {
+GFXAdapter::GFXAdapter(VkPhysicalDevice adapter, RefPtr<GFXInstance> instance)
+    : adapter_(adapter), instance_(instance) {
   ConfigureSupportedExtensions();
   GetDeviceQueueFamilies();
 }
@@ -490,15 +491,18 @@ WGPUFuture GFXAdapter::RequestDevice(
 
   GFXDevice* device_impl = nullptr;
   if (device) {
+    // label
     std::string device_label = "GFX.Device";
     if (descriptor && descriptor->label.data)
       device_label =
           std::string(descriptor->label.data, descriptor->label.length);
 
+    // device lost callback
     WGPUDeviceLostCallbackInfo device_lost_callback = {};
     if (descriptor)
       device_lost_callback = descriptor->deviceLostCallbackInfo;
 
+    // error callback
     WGPUUncapturedErrorCallbackInfo uncaptured_error_callback = {};
     if (descriptor)
       uncaptured_error_callback = descriptor->uncapturedErrorCallbackInfo;

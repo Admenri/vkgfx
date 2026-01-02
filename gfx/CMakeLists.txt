@@ -48,8 +48,9 @@ set(VKGFX_GFX_SRC
   gfx_surface.h
   gfx_texture.cc
   gfx_texture.h
-  gfx_texture_view.h
   gfx_texture_view.cc
+  gfx_texture_view.h
+  gfx_utils.cc
   gfx_utils.h
   gfx_wgpu.cc
   gfx_wgpu.h
@@ -58,6 +59,7 @@ set(VKGFX_GFX_SRC
 add_library(vkgfx STATIC ${VKGFX_GFX_SRC})
 target_link_libraries(vkgfx
  PUBLIC
+  vma
   volk::volk
   webgpu-cpp-header
 )

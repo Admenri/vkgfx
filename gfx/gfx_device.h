@@ -11,6 +11,8 @@
 #include "gfx/gfx_adapter.h"
 #include "gfx/gfx_config.h"
 
+#include "vma/vma.h"
+
 struct WGPUDeviceImpl {};
 
 namespace vkgfx {
@@ -30,6 +32,11 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
 
   VkDevice GetVkHandle() const { return device_; }
 
+  void CallDeviceLostCallback(WGPUDeviceLostReason reason,
+                              const std::string& message);
+  void CallDeviceErrorCallback(WGPUErrorType type, const std::string& message);
+
+ public:
   WGPUBindGroup CreateBindGroup(WGPUBindGroupDescriptor const* descriptor);
   WGPUBindGroupLayout CreateBindGroupLayout(
       WGPUBindGroupLayoutDescriptor const* descriptor);
@@ -67,9 +74,13 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
   void SetLabel(WGPUStringView label);
 
  private:
+  void DestroyInternal();
+  void CreateAllocatorInternal();
+
   VkDevice device_;
 
   RefPtr<GFXAdapter> adapter_;
+  VmaAllocator allocator_;
 
   std::string label_;
   WGPUDeviceLostCallbackInfo device_lost_callback_;

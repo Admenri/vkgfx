@@ -4,6 +4,51 @@
 
 #include "gfx/gfx_device.h"
 
+#include "gfx/gfx_sampler.h"
+#include "gfx/gfx_utils.h"
+
+namespace {
+
+VkSamplerAddressMode ToVulkanSamplerAddressMode(WGPUAddressMode mode) {
+  switch (mode) {
+    case WGPUAddressMode_Repeat:
+      return VK_SAMPLER_ADDRESS_MODE_REPEAT;
+    case WGPUAddressMode_MirrorRepeat:
+      return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+    case WGPUAddressMode_ClampToEdge:
+      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    case WGPUAddressMode_Undefined:
+      break;
+  }
+  return VkSamplerAddressMode();
+}
+
+VkFilter ToVulkanSamplerFilter(WGPUFilterMode filter) {
+  switch (filter) {
+    case WGPUFilterMode_Linear:
+      return VK_FILTER_LINEAR;
+    case WGPUFilterMode_Nearest:
+      return VK_FILTER_NEAREST;
+    case WGPUFilterMode_Undefined:
+      break;
+  }
+  return VkFilter();
+}
+
+VkSamplerMipmapMode ToVulkanMipMapMode(WGPUMipmapFilterMode filter) {
+  switch (filter) {
+    case WGPUMipmapFilterMode_Linear:
+      return VK_SAMPLER_MIPMAP_MODE_LINEAR;
+    case WGPUMipmapFilterMode_Nearest:
+      return VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    case WGPUMipmapFilterMode_Undefined:
+      break;
+  }
+  return VkSamplerMipmapMode();
+}
+
+}  // namespace
+
 namespace vkgfx {
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -18,10 +63,34 @@ GFXDevice::GFXDevice(VkDevice device,
       adapter_(adapter),
       label_(label),
       device_lost_callback_(device_lost_callback),
-      uncaptured_error_callback_(uncaptured_error_callback) {}
+      uncaptured_error_callback_(uncaptured_error_callback) {
+  CreateAllocatorInternal();
+}
 
 GFXDevice::~GFXDevice() {
   Destroy();
+}
+
+void GFXDevice::CallDeviceLostCallback(WGPUDeviceLostReason reason,
+                                       const std::string& message) {
+  if (device_lost_callback_.callback) {
+    WGPUDevice wgpu_device = this;
+    WGPUStringView wgpu_string = {message.c_str(), message.size()};
+    device_lost_callback_.callback(&wgpu_device, reason, wgpu_string,
+                                   device_lost_callback_.userdata1,
+                                   device_lost_callback_.userdata2);
+  }
+}
+
+void GFXDevice::CallDeviceErrorCallback(WGPUErrorType type,
+                                        const std::string& message) {
+  if (uncaptured_error_callback_.callback) {
+    WGPUDevice wgpu_device = this;
+    WGPUStringView wgpu_string = {message.c_str(), message.size()};
+    uncaptured_error_callback_.callback(&wgpu_device, type, wgpu_string,
+                                        uncaptured_error_callback_.userdata1,
+                                        uncaptured_error_callback_.userdata2);
+  }
 }
 
 WGPUBindGroup GFXDevice::CreateBindGroup(
@@ -81,7 +150,45 @@ WGPUFuture GFXDevice::CreateRenderPipelineAsync(
 }
 
 WGPUSampler GFXDevice::CreateSampler(WGPUSamplerDescriptor const* descriptor) {
-  return WGPUSampler();
+  if (!device_)
+    return nullptr;
+
+  if (!descriptor)
+    return nullptr;
+
+  VkSamplerCreateInfo create_info = {VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO};
+  create_info.addressModeU =
+      ToVulkanSamplerAddressMode(descriptor->addressModeU);
+  create_info.addressModeV =
+      ToVulkanSamplerAddressMode(descriptor->addressModeV);
+  create_info.addressModeW =
+      ToVulkanSamplerAddressMode(descriptor->addressModeW);
+  create_info.magFilter = ToVulkanSamplerFilter(descriptor->magFilter);
+  create_info.minFilter = ToVulkanSamplerFilter(descriptor->minFilter);
+  create_info.mipmapMode = ToVulkanMipMapMode(descriptor->mipmapFilter);
+  create_info.minLod = descriptor->lodMinClamp;
+  create_info.maxLod = descriptor->lodMaxClamp;
+  if (descriptor->compare != WGPUCompareFunction_Undefined) {
+    create_info.compareEnable = VK_TRUE;
+    create_info.compareOp;
+  } else {
+    create_info.compareEnable = VK_FALSE;
+    create_info.compareOp = VK_COMPARE_OP_NEVER;
+  }
+
+  if (adapter_->GetDeviceInfo().features.features.samplerAnisotropy) {
+    create_info.anisotropyEnable = VK_TRUE;
+    create_info.maxAnisotropy = descriptor->maxAnisotropy;
+  } else {
+    create_info.anisotropyEnable = VK_FALSE;
+    create_info.maxAnisotropy = 1.0f;
+  }
+
+  VkSampler sampler = VK_NULL_HANDLE;
+  vkCreateSampler(device_, &create_info, nullptr, &sampler);
+
+  return AdaptExternalRefCounted(
+      new GFXSampler(sampler, this, descriptor->label));
 }
 
 WGPUShaderModule GFXDevice::CreateShaderModule(
@@ -94,12 +201,7 @@ WGPUTexture GFXDevice::CreateTexture(WGPUTextureDescriptor const* descriptor) {
 }
 
 void GFXDevice::Destroy() {
-  adapter_.reset();
-
-  if (device_) {
-    vkDestroyDevice(device_, nullptr);
-    device_ = VK_NULL_HANDLE;
-  }
+  DestroyInternal();
 }
 
 WGPUStatus GFXDevice::GetAdapterInfo(WGPUAdapterInfo* adapterInfo) {
@@ -133,6 +235,33 @@ void GFXDevice::PushErrorScope(WGPUErrorFilter filter) {}
 
 void GFXDevice::SetLabel(WGPUStringView label) {
   label_ = std::string(label.data, label.length);
+}
+
+void GFXDevice::DestroyInternal() {
+  adapter_.reset();
+
+  if (allocator_) {
+    vmaDestroyAllocator(allocator_);
+    allocator_ = nullptr;
+  }
+
+  if (device_) {
+    vkDestroyDevice(device_, nullptr);
+    device_ = VK_NULL_HANDLE;
+  }
+}
+
+void GFXDevice::CreateAllocatorInternal() {
+  VmaVulkanFunctions vulkan_functions;
+  VmaAllocatorCreateInfo allocator_create_info = {};
+  allocator_create_info.physicalDevice = adapter_->GetVkHandle();
+  allocator_create_info.device = device_;
+  allocator_create_info.instance = adapter_->GetInstance()->GetVkHandle();
+  allocator_create_info.vulkanApiVersion = VK_API_VERSION_1_1;
+  allocator_create_info.pVulkanFunctions = &vulkan_functions;
+
+  vmaImportVulkanFunctionsFromVolk(&allocator_create_info, &vulkan_functions);
+  vmaCreateAllocator(&allocator_create_info, &allocator_);
 }
 
 }  // namespace vkgfx

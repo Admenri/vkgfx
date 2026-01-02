@@ -82,6 +82,7 @@ class ChainedStructExtractor {
     for (auto* current = root_; current; current = current->next)
       if (current->sType == type)
         return reinterpret_cast<Ty*>(current);
+    return nullptr;
   }
 
   void VisitChain(const std::function<void(WGPUChainedStruct*)>& visitor) {
