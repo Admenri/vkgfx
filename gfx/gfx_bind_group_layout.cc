@@ -12,12 +12,16 @@ namespace vkgfx {
 // GFXBindGroupLayout Implement
 
 GFXBindGroupLayout::GFXBindGroupLayout(VkDescriptorSetLayout layout,
+                                       const std::vector<LayoutEntry>& entries,
                                        RefPtr<GFXDevice> device,
-                                       const std::string& label)
-    : layout_(layout), device_(device), label_(label) {}
+                                       WGPUStringView label)
+    : layout_(layout), entries_(entries), device_(device) {
+  if (label.data && label.length)
+    label_ = std::string(label.data, label.length);
+}
 
 GFXBindGroupLayout::~GFXBindGroupLayout() {
-  if (layout_)
+  if (layout_ && device_)
     vkDestroyDescriptorSetLayout(device_->GetVkHandle(), layout_, nullptr);
 }
 

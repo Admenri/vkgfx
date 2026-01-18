@@ -26,6 +26,8 @@ class GFXAdapter : public RefCounted<GFXAdapter>, public WGPUAdapterImpl {
     kShaderSubgroupExtendedTypes,     // promoted to 1.2
     kShaderDemoteToHelperInvocation,  // promoted to 1.3
     kShaderIntegerDotProduct,         // promoted to 1.3
+    kSwapchain,                       // never promoted
+    kDepthClipEnable,                 // never promoted
     kExtensionNums,
   };
 
@@ -77,22 +79,18 @@ class GFXAdapter : public RefCounted<GFXAdapter>, public WGPUAdapterImpl {
   WGPUStatus GetInfo(WGPUAdapterInfo* info);
   WGPUStatus GetLimits(WGPULimits* limits);
   WGPUBool HasFeature(WGPUFeatureName feature);
-  WGPUFuture RequestDevice(WGPU_NULLABLE WGPUDeviceDescriptor const* descriptor,
+  WGPUFuture RequestDevice(WGPUDeviceDescriptor const* descriptor,
                            WGPURequestDeviceCallbackInfo callbackInfo);
 
  private:
-  void ConfigureSupportedExtensions();
+  void ConfigureAdapterInternal();
   std::vector<WGPUFeatureName> GetAdapterFeatures();
-  void GetDeviceQueueFamilies();
 
   VkPhysicalDevice adapter_;
+  std::array<VkBool32, kExtensionNums> extensions_{false};
 
   RefPtr<GFXInstance> instance_;
-
   DeviceInfo device_info_;
-
-  std::array<VkBool32, kExtensionNums> extensions_{false};
-  std::vector<VkQueueFamilyProperties> queue_families_;
 };
 
 }  // namespace vkgfx

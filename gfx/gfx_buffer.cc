@@ -12,18 +12,25 @@ namespace vkgfx {
 // GFXBuffer Implement
 
 GFXBuffer::GFXBuffer(VkBuffer buffer,
+                     VmaAllocation allocation,
                      RefPtr<GFXDevice> device,
-                     const std::string& label)
-    : buffer_(buffer), device_(device), label_(label) {}
+                     WGPUStringView label)
+    : buffer_(buffer), allocation_(allocation), device_(device) {
+  if (label.data && label.length)
+    label_ = std::string(label.data, label.length);
+}
 
 GFXBuffer::~GFXBuffer() {
   Destroy();
 }
 
 void GFXBuffer::Destroy() {
-  if (buffer_ && device_) {
-    vkDestroyBuffer(device_->GetVkHandle(), buffer_, nullptr);
-  }
+  if (buffer_ && device_ && allocation_)
+    vmaDestroyBuffer(device_->GetAllocator(), buffer_, allocation_);
+
+  buffer_ = nullptr;
+  device_.reset();
+  allocation_ = nullptr;
 }
 
 void const* GFXBuffer::GetConstMappedRange(size_t offset, size_t size) {

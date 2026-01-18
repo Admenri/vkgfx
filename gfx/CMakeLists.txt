@@ -40,6 +40,8 @@ set(VKGFX_GFX_SRC
   gfx_render_pass_encoder.h
   gfx_render_pipeline.cc
   gfx_render_pipeline.h
+  gfx_resource_track.cc
+  gfx_resource_track.h
   gfx_sampler.cc
   gfx_sampler.h
   gfx_shader_module.cc
@@ -61,5 +63,4 @@ target_link_libraries(vkgfx
  PUBLIC
   vma
   volk::volk
-  webgpu-cpp-header
 )

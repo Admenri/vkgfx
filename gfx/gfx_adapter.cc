@@ -28,6 +28,9 @@ static constexpr std::array<DeviceExtInfo, GFXAdapter::kExtensionNums>
                       VK_EXT_SHADER_DEMOTE_TO_HELPER_INVOCATION_EXTENSION_NAME},
         DeviceExtInfo{GFXAdapter::kShaderIntegerDotProduct,
                       VK_KHR_SHADER_INTEGER_DOT_PRODUCT_EXTENSION_NAME},
+        DeviceExtInfo{GFXAdapter::kSwapchain, VK_KHR_SWAPCHAIN_EXTENSION_NAME},
+        DeviceExtInfo{GFXAdapter::kDepthClipEnable,
+                      VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME},
     };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -35,86 +38,107 @@ static constexpr std::array<DeviceExtInfo, GFXAdapter::kExtensionNums>
 
 GFXAdapter::GFXAdapter(VkPhysicalDevice adapter, RefPtr<GFXInstance> instance)
     : adapter_(adapter), instance_(instance) {
-  ConfigureSupportedExtensions();
-  GetDeviceQueueFamilies();
-}
-
-void GFXAdapter::ConfigureSupportedExtensions() {
-  // Extensions check
-  uint32_t extension_count = 0;
-  vkEnumerateDeviceExtensionProperties(adapter_, nullptr, &extension_count,
-                                       nullptr);
-  std::vector<VkExtensionProperties> available_extensions(extension_count);
-  vkEnumerateDeviceExtensionProperties(adapter_, nullptr, &extension_count,
-                                       available_extensions.data());
-
-  for (const auto& ext : available_extensions)
-    for (size_t i = 0; i < kDeviceExtensions.size(); ++i)
-      if (!std::strcmp(kDeviceExtensions[i].name, ext.extensionName))
-        extensions_[kDeviceExtensions[i].ext] = VK_TRUE;
-
-  // Properties
-  device_info_.properties = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
-  device_info_.subgroup_properties = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
-  device_info_.subgroup_size_control_properties = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES};
-
-  NextChainBuilder properties_chain_builder(&device_info_.properties);
-  properties_chain_builder.Add(&device_info_.subgroup_properties);
-
-  if (extensions_[DeviceExtension::kSubgroupSizeControl])
-    properties_chain_builder.Add(
-        &device_info_.subgroup_size_control_properties);
-
-  vkGetPhysicalDeviceProperties2(adapter_, &device_info_.properties);
-
-  // Features
-  device_info_.features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
-  device_info_.shader_float16_int8_features = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES};
-  device_info_.shader_16bit_storage_features = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES};
-  device_info_.subgroup_size_control_features = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES};
-  device_info_.shader_subgroup_extended_types_features = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES};
-  device_info_.shader_demote_to_helper_invocation_features = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT};
-  device_info_.shader_integer_dot_product_features = {
-      VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES_KHR};
-
-  NextChainBuilder features_chain_builder(&device_info_.features);
-  features_chain_builder.Add(&device_info_.shader_16bit_storage_features);
-
-  if (extensions_[DeviceExtension::kShaderFloat16Int8])
-    features_chain_builder.Add(&device_info_.shader_float16_int8_features);
-
-  if (extensions_[DeviceExtension::kSubgroupSizeControl])
-    features_chain_builder.Add(&device_info_.subgroup_size_control_features);
-
-  if (extensions_[DeviceExtension::kShaderSubgroupExtendedTypes])
-    features_chain_builder.Add(
-        &device_info_.shader_subgroup_extended_types_features);
-
-  if (extensions_[DeviceExtension::kShaderDemoteToHelperInvocation])
-    features_chain_builder.Add(
-        &device_info_.shader_demote_to_helper_invocation_features);
-
-  if (extensions_[DeviceExtension::kShaderIntegerDotProduct])
-    features_chain_builder.Add(
-        &device_info_.shader_integer_dot_product_features);
-
-  vkGetPhysicalDeviceFeatures2(adapter_, &device_info_.features);
+  ConfigureAdapterInternal();
 }
 
 GFXAdapter::~GFXAdapter() = default;
 
-void GFXAdapter::GetFeatures(WGPUSupportedFeatures* features) {
-  if (!features) {
-    GFX_ERROR() << __FUNCTION__ << ": features is null.";
-    return;
+void GFXAdapter::ConfigureAdapterInternal() {
+  // Extensions enable check
+  {
+    uint32_t extension_count = 0;
+    vkEnumerateDeviceExtensionProperties(adapter_, nullptr, &extension_count,
+                                         nullptr);
+    std::vector<VkExtensionProperties> available_extensions(extension_count);
+    vkEnumerateDeviceExtensionProperties(adapter_, nullptr, &extension_count,
+                                         available_extensions.data());
+
+    for (const auto& ext : available_extensions)
+      for (size_t i = 0; i < kDeviceExtensions.size(); ++i)
+        if (!std::strcmp(kDeviceExtensions[i].name, ext.extensionName))
+          extensions_[kDeviceExtensions[i].ext] = VK_TRUE;
   }
+
+  // Properties fetch
+  {
+    device_info_.properties = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    NextChainBuilder properties_chain_builder(&device_info_.properties);
+
+    // Core 1.1
+    {
+      device_info_.subgroup_properties = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+      properties_chain_builder.Add(&device_info_.subgroup_properties);
+    }
+
+    // VK_EXT_subgroup_size_control
+    if (extensions_[DeviceExtension::kSubgroupSizeControl]) {
+      device_info_.subgroup_size_control_properties = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_PROPERTIES};
+      properties_chain_builder.Add(
+          &device_info_.subgroup_size_control_properties);
+    }
+
+    vkGetPhysicalDeviceProperties2(adapter_, &device_info_.properties);
+  }
+
+  // Features fetch
+  {
+    device_info_.features = {VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2};
+    NextChainBuilder features_chain_builder(&device_info_.features);
+
+    // Core 1.1
+    {
+      device_info_.shader_16bit_storage_features = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_16BIT_STORAGE_FEATURES};
+      features_chain_builder.Add(&device_info_.shader_16bit_storage_features);
+    }
+
+    // VK_KHR_shader_float16_int8
+    if (extensions_[DeviceExtension::kShaderFloat16Int8]) {
+      device_info_.shader_float16_int8_features = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_FLOAT16_INT8_FEATURES};
+      features_chain_builder.Add(&device_info_.shader_float16_int8_features);
+    }
+
+    // VK_EXT_subgroup_size_control
+    if (extensions_[DeviceExtension::kSubgroupSizeControl]) {
+      device_info_.subgroup_size_control_features = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_SIZE_CONTROL_FEATURES};
+      features_chain_builder.Add(&device_info_.subgroup_size_control_features);
+    }
+
+    // VK_KHR_shader_subgroup_extended_types
+    if (extensions_[DeviceExtension::kShaderSubgroupExtendedTypes]) {
+      device_info_.shader_subgroup_extended_types_features = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_SUBGROUP_EXTENDED_TYPES_FEATURES};
+      features_chain_builder.Add(
+          &device_info_.shader_subgroup_extended_types_features);
+    }
+
+    // VK_EXT_shader_demote_to_helper_invocation
+    if (extensions_[DeviceExtension::kShaderDemoteToHelperInvocation]) {
+      device_info_.shader_demote_to_helper_invocation_features = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_DEMOTE_TO_HELPER_INVOCATION_FEATURES_EXT};
+      features_chain_builder.Add(
+          &device_info_.shader_demote_to_helper_invocation_features);
+    }
+
+    // VK_KHR_shader_integer_dot_product
+    if (extensions_[DeviceExtension::kShaderIntegerDotProduct]) {
+      device_info_.shader_integer_dot_product_features = {
+          VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SHADER_INTEGER_DOT_PRODUCT_FEATURES_KHR};
+      features_chain_builder.Add(
+          &device_info_.shader_integer_dot_product_features);
+    }
+
+    vkGetPhysicalDeviceFeatures2(adapter_, &device_info_.features);
+  }
+}
+
+void GFXAdapter::GetFeatures(WGPUSupportedFeatures* features) {
+  if (!features)
+    return;
 
   const auto feature_names = GetAdapterFeatures();
   WGPUFeatureName* out_features = new WGPUFeatureName[feature_names.size()];
@@ -126,15 +150,11 @@ void GFXAdapter::GetFeatures(WGPUSupportedFeatures* features) {
 }
 
 WGPUStatus GFXAdapter::GetInfo(WGPUAdapterInfo* info) {
-  if (!info) {
-    GFX_ERROR() << __FUNCTION__ << ": info is null.";
+  if (!info)
     return WGPUStatus_Error;
-  }
 
-  if (info->nextInChain) {
-    GFX_ERROR() << __FUNCTION__ << ": nextInChain is not null.";
+  if (info->nextInChain)
     return WGPUStatus_Error;
-  }
 
   info->vendor = MakeStringView("GPU Vendor");
   info->architecture = MakeStringView("GPU Architecture");
@@ -175,15 +195,11 @@ WGPUStatus GFXAdapter::GetInfo(WGPUAdapterInfo* info) {
 }
 
 WGPUStatus GFXAdapter::GetLimits(WGPULimits* limits) {
-  if (!limits) {
-    GFX_ERROR() << __FUNCTION__ << ": limits is null.";
+  if (!limits)
     return WGPUStatus_Error;
-  }
 
-  if (limits->nextInChain) {
-    GFX_ERROR() << __FUNCTION__ << ": nextInChain is not null.";
+  if (limits->nextInChain)
     return WGPUStatus_Error;
-  }
 
   VkPhysicalDeviceProperties device_properties =
       device_info_.properties.properties;
@@ -260,42 +276,48 @@ WGPUBool GFXAdapter::HasFeature(WGPUFeatureName feature) {
 }
 
 WGPUFuture GFXAdapter::RequestDevice(
-    WGPU_NULLABLE WGPUDeviceDescriptor const* descriptor,
+    WGPUDeviceDescriptor const* descriptor,
     WGPURequestDeviceCallbackInfo callbackInfo) {
-  if (descriptor && descriptor->nextInChain) {
+  if (!descriptor) {
+    WGPUDeviceDescriptor default_descriptor = {};
+    return RequestDevice(&default_descriptor, callbackInfo);
+  }
+
+  if (!callbackInfo.callback)
+    return GFXInstance::kInvalidFuture;
+
+  auto on_success_callback = [&](GFXDevice* device) {
+    callbackInfo.callback(WGPURequestDeviceStatus_Success, device,
+                          WGPUStringView(), callbackInfo.userdata1,
+                          callbackInfo.userdata2);
+  };
+
+  auto on_error_callback = [&](const std::string& error_info) {
+    WGPUStringView error_message = {error_info.c_str(), error_info.size()};
+    callbackInfo.callback(WGPURequestDeviceStatus_Error, nullptr, error_message,
+                          callbackInfo.userdata1, callbackInfo.userdata2);
+  };
+
+  if (descriptor->nextInChain) {
     GFX_ERROR() << __FUNCTION__ << ": descriptor->nextInChain is not null.";
     return GFXInstance::kInvalidFuture;
   }
 
-  if (!callbackInfo.callback) {
-    GFX_ERROR() << __FUNCTION__ << ": callbackInfo.callback is null.";
-    return GFXInstance::kInvalidFuture;
-  }
-
   // Required limits
-  if (descriptor && descriptor->requiredLimits) {
+  bool required_limits_valid = true;
+  if (descriptor->requiredLimits) {
     WGPULimits supported_limits = {};
     GetLimits(&supported_limits);
 
-#define CHECK_MAX_LIMIT(field)                                      \
-  if (descriptor->requiredLimits->field > supported_limits.field) { \
-    GFX_ERROR() << __FUNCTION__ << ": Required limit " #field       \
-                << " not supported.";                               \
-    return GFXInstance::kInvalidFuture;                             \
-  }
+#define CHECK_MAX_LIMIT(field)                                    \
+  if (descriptor->requiredLimits->field > supported_limits.field) \
+    required_limits_valid = false;
 
-#define CHECK_ALIGN_LIMIT(field)                                    \
-  if (descriptor->requiredLimits->field > supported_limits.field) { \
-    GFX_ERROR() << __FUNCTION__ << ": Required limit " #field       \
-                << " not supported.";                               \
-    return GFXInstance::kInvalidFuture;                             \
-  }                                                                 \
-  if ((descriptor->requiredLimits->field &                          \
-       (descriptor->requiredLimits->field - 1)) != 0) {             \
-    GFX_ERROR() << __FUNCTION__ << ": Required limit " #field       \
-                << " must be a power of two.";                      \
-    return GFXInstance::kInvalidFuture;                             \
-  }
+#define CHECK_ALIGN_LIMIT(field)                      \
+  CHECK_MAX_LIMIT(field)                              \
+  if ((descriptor->requiredLimits->field &            \
+       (descriptor->requiredLimits->field - 1)) != 0) \
+    required_limits_valid = false;
 
     CHECK_MAX_LIMIT(maxTextureDimension1D);
     CHECK_MAX_LIMIT(maxTextureDimension2D);
@@ -334,6 +356,16 @@ WGPUFuture GFXAdapter::RequestDevice(
 #undef CHECK_ALIGN_LIMIT
   }
 
+  if (!required_limits_valid) {
+    return GFXInstance::kInvalidFuture;
+  }
+
+  // Required extensions
+  std::vector<const char*> enabled_extension_names;
+  for (auto& it : kDeviceExtensions)
+    if (extensions_[it.ext])
+      enabled_extension_names.push_back(it.name);
+
   // Required features
   DeviceFeatures features_knobs = {};
   VkPhysicalDeviceFeatures2 enabled_features = {
@@ -357,9 +389,6 @@ WGPUFuture GFXAdapter::RequestDevice(
     enabled_features.features.shaderStorageBufferArrayDynamicIndexing = VK_TRUE;
     enabled_features.features.shaderSampledImageArrayDynamicIndexing = VK_TRUE;
     enabled_features.features.shaderStorageImageArrayDynamicIndexing = VK_TRUE;
-
-    if (device_info_.features.features.samplerAnisotropy)
-      enabled_features.features.samplerAnisotropy = VK_TRUE;
 
     // Required for core WebGPU features.
     if (CHECK_FEATURE(CoreFeaturesAndLimits)) {
@@ -443,83 +472,65 @@ WGPUFuture GFXAdapter::RequestDevice(
 #undef CHECK_FEATURE
   }
 
-  // Required extensions
-  std::vector<const char*> enabled_extension_names;
-  for (const auto& ext : kDeviceExtensions)
-    enabled_extension_names.push_back(ext.name);
-
   // Queue family select
   uint32_t main_queue_family = UINT32_MAX;
-  constexpr uint32_t kUniversalFlags =
-      VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
-  for (size_t i = 0; i < queue_families_.size(); ++i) {
-    if ((queue_families_[i].queueFlags & kUniversalFlags) == kUniversalFlags) {
-      main_queue_family = static_cast<uint32_t>(i);
-      break;
+  {
+    uint32_t queue_family_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(adapter_, &queue_family_count,
+                                             nullptr);
+    std::vector<VkQueueFamilyProperties> queue_families(queue_family_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(adapter_, &queue_family_count,
+                                             queue_families.data());
+
+    constexpr uint32_t kUniversalFlags =
+        VK_QUEUE_GRAPHICS_BIT | VK_QUEUE_COMPUTE_BIT;
+    for (size_t i = 0; i < queue_families.size(); ++i) {
+      if ((queue_families[i].queueFlags & kUniversalFlags) == kUniversalFlags) {
+        main_queue_family = static_cast<uint32_t>(i);
+        break;
+      }
     }
   }
 
-  if (main_queue_family == UINT32_MAX) {
-    GFX_ERROR() << __FUNCTION__ << ": No suitable queue family.";
-    return GFXInstance::kInvalidFuture;
+  if (main_queue_family != UINT32_MAX) {
+    // Queue family create info
+    std::vector<VkDeviceQueueCreateInfo> queues_to_request;
+    float zero = 0.0f;
+
+    {
+      VkDeviceQueueCreateInfo queue_create_info = {
+          VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
+      queue_create_info.queueFamilyIndex = main_queue_family;
+      queue_create_info.queueCount = 1;
+      queue_create_info.pQueuePriorities = &zero;
+
+      queues_to_request.push_back(queue_create_info);
+    }
+
+    // Create device
+    VkDeviceCreateInfo create_info = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
+    create_info.pNext = &enabled_features;
+    create_info.queueCreateInfoCount = queues_to_request.size();
+    create_info.pQueueCreateInfos = queues_to_request.data();
+    create_info.enabledExtensionCount = enabled_extension_names.size();
+    create_info.ppEnabledExtensionNames = enabled_extension_names.data();
+
+    VkDevice device;
+    vkCreateDevice(adapter_, &create_info, nullptr, &device);
+
+    GFXDevice* device_impl = nullptr;
+    if (device)
+      device_impl = new GFXDevice(device, this, descriptor->label,
+                                  descriptor->deviceLostCallbackInfo,
+                                  descriptor->uncapturedErrorCallbackInfo);
+
+    on_success_callback(AdaptExternalRefCounted(device_impl));
   }
-
-  // Queue family create info
-  std::vector<VkDeviceQueueCreateInfo> queues_to_request;
-  float zero = 0.0f;
-
-  {
-    VkDeviceQueueCreateInfo queue_create_info = {
-        VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO};
-    queue_create_info.queueFamilyIndex = main_queue_family;
-    queue_create_info.queueCount = 1;
-    queue_create_info.pQueuePriorities = &zero;
-
-    queues_to_request.push_back(queue_create_info);
-  }
-
-  // Create device
-  VkDeviceCreateInfo create_info = {VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO};
-  create_info.pNext = &enabled_features;
-  create_info.queueCreateInfoCount = queues_to_request.size();
-  create_info.pQueueCreateInfos = queues_to_request.data();
-  create_info.enabledExtensionCount = enabled_extension_names.size();
-  create_info.ppEnabledExtensionNames = enabled_extension_names.data();
-
-  VkDevice device;
-  vkCreateDevice(adapter_, &create_info, nullptr, &device);
-
-  GFXDevice* device_impl = nullptr;
-  if (device) {
-    // label
-    std::string device_label = "GFX.Device";
-    if (descriptor && descriptor->label.data)
-      device_label =
-          std::string(descriptor->label.data, descriptor->label.length);
-
-    // device lost callback
-    WGPUDeviceLostCallbackInfo device_lost_callback = {};
-    if (descriptor)
-      device_lost_callback = descriptor->deviceLostCallbackInfo;
-
-    // error callback
-    WGPUUncapturedErrorCallbackInfo uncaptured_error_callback = {};
-    if (descriptor)
-      uncaptured_error_callback = descriptor->uncapturedErrorCallbackInfo;
-
-    device_impl =
-        new GFXDevice(device, this, device_label, device_lost_callback,
-                      uncaptured_error_callback);
-  }
-
-  WGPUStringView message = {};
-  callbackInfo.callback(WGPURequestDeviceStatus_Success,
-                        AdaptExternalRefCounted(device_impl), message,
-                        callbackInfo.userdata1, callbackInfo.userdata2);
 
   return GFXInstance::kImmediateFuture;
 }
 
+// https://www.w3.org/TR/webgpu/#feature-index
 std::vector<WGPUFeatureName> GFXAdapter::GetAdapterFeatures() {
   VkFormatProperties format_properties;
   std::vector<WGPUFeatureName> feature_names;
@@ -711,16 +722,6 @@ std::vector<WGPUFeatureName> GFXAdapter::GetAdapterFeatures() {
       WGPUFeatureName_TextureComponentSwizzle);  // Vk 1.0 Core
 
   return feature_names;
-}
-
-void GFXAdapter::GetDeviceQueueFamilies() {
-  uint32_t queue_family_count = 0;
-  vkGetPhysicalDeviceQueueFamilyProperties(adapter_, &queue_family_count,
-                                           nullptr);
-
-  queue_families_.resize(queue_family_count);
-  vkGetPhysicalDeviceQueueFamilyProperties(adapter_, &queue_family_count,
-                                           queue_families_.data());
 }
 
 }  // namespace vkgfx

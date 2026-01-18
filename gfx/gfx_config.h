@@ -5,8 +5,8 @@
 #ifndef GFX_CONFIG_H_
 #define GFX_CONFIG_H_
 
-#include <volk.h>
-#include <webgpu/webgpu.h>
+#include "volk.h"
+#include "webgpu-headers/webgpu.h"
 
 #define GFX_EXPORT WGPU_EXPORT extern "C"
 #define GFX_FUNCTION(name) wgpu##name

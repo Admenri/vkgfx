@@ -4,21 +4,39 @@
 
 #include "gfx/gfx_texture.h"
 
+#include "gfx/gfx_utils.h"
+
 namespace vkgfx {
 
 ///////////////////////////////////////////////////////////////////////////////
 // GFXTexture Implement
 
-GFXTexture::GFXTexture() {}
+GFXTexture::GFXTexture(VkImage image,
+                       VmaAllocation allocation,
+                       RefPtr<GFXDevice> device,
+                       WGPUStringView label)
+    : image_(image), allocation_(allocation), device_(device) {
+  if (label.data && label.length)
+    label_ = std::string(label.data, label.length);
+}
 
-GFXTexture::~GFXTexture() {}
+GFXTexture::~GFXTexture() {
+  Destroy();
+}
 
 WGPUTextureView GFXTexture::CreateView(
     WGPUTextureViewDescriptor const* descriptor) {
   return WGPUTextureView();
 }
 
-void GFXTexture::Destroy() {}
+void GFXTexture::Destroy() {
+  if (image_ && device_ && allocation_)
+    vmaDestroyImage(device_->GetAllocator(), image_, allocation_);
+
+  image_ = nullptr;
+  device_.reset();
+  allocation_ = nullptr;
+}
 
 uint32_t GFXTexture::GetDepthOrArrayLayers() {
   return 0;

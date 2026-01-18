@@ -9,6 +9,8 @@
 #include "gfx/gfx_config.h"
 #include "gfx/gfx_device.h"
 
+#include "vma/vma.h"
+
 struct WGPUBufferImpl {};
 
 namespace vkgfx {
@@ -17,8 +19,9 @@ namespace vkgfx {
 class GFXBuffer : public RefCounted<GFXBuffer>, public WGPUBufferImpl {
  public:
   GFXBuffer(VkBuffer buffer,
+            VmaAllocation allocation,
             RefPtr<GFXDevice> device,
-            const std::string& label);
+            WGPUStringView label);
   ~GFXBuffer();
 
   GFXBuffer(const GFXBuffer&) = delete;
@@ -43,10 +46,11 @@ class GFXBuffer : public RefCounted<GFXBuffer>, public WGPUBufferImpl {
 
  private:
   VkBuffer buffer_;
+  VmaAllocation allocation_;
 
   RefPtr<GFXDevice> device_;
 
-  std::string label_;
+  std::string label_ = "GFX.Buffer";
 };
 
 }  // namespace vkgfx

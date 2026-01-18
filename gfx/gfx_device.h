@@ -22,7 +22,7 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
  public:
   GFXDevice(VkDevice device,
             RefPtr<GFXAdapter> adapter,
-            const std::string& label,
+            WGPUStringView label,
             WGPUDeviceLostCallbackInfo device_lost_callback,
             WGPUUncapturedErrorCallbackInfo uncaptured_error_callback);
   ~GFXDevice();
@@ -31,6 +31,7 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
   GFXDevice& operator=(const GFXDevice&) = delete;
 
   VkDevice GetVkHandle() const { return device_; }
+  VmaAllocator GetAllocator() const { return allocator_; }
 
   void CallDeviceLostCallback(WGPUDeviceLostReason reason,
                               const std::string& message);
@@ -74,7 +75,6 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
   void SetLabel(WGPUStringView label);
 
  private:
-  void DestroyInternal();
   void CreateAllocatorInternal();
 
   VkDevice device_;
@@ -82,7 +82,7 @@ class GFXDevice : public RefCounted<GFXDevice>, public WGPUDeviceImpl {
   RefPtr<GFXAdapter> adapter_;
   VmaAllocator allocator_;
 
-  std::string label_;
+  std::string label_ = "GFX.Device";
   WGPUDeviceLostCallbackInfo device_lost_callback_;
   WGPUUncapturedErrorCallbackInfo uncaptured_error_callback_;
 };

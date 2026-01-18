@@ -7,6 +7,9 @@
 
 #include "gfx/common/refptr.h"
 #include "gfx/gfx_config.h"
+#include "gfx/gfx_device.h"
+
+#include "vma/vma.h"
 
 struct WGPUTextureImpl {};
 
@@ -15,7 +18,10 @@ namespace vkgfx {
 // https://gpuweb.github.io/gpuweb/#gputexture
 class GFXTexture : public RefCounted<GFXTexture>, public WGPUTextureImpl {
  public:
-  GFXTexture();
+  GFXTexture(VkImage image,
+             VmaAllocation allocation,
+             RefPtr<GFXDevice> device,
+             WGPUStringView label);
   ~GFXTexture();
 
   GFXTexture(const GFXTexture&) = delete;
@@ -35,8 +41,11 @@ class GFXTexture : public RefCounted<GFXTexture>, public WGPUTextureImpl {
 
  private:
   VkImage image_;
+  VmaAllocation allocation_;
 
-  std::string label_;
+  RefPtr<GFXDevice> device_;
+
+  std::string label_ = "GFX.Texture";
 };
 
 }  // namespace vkgfx

@@ -34,13 +34,15 @@ WGPUSurface GFXInstance::CreateSurface(
   if (!descriptor)
     return nullptr;
 
-  ChainedStructExtractor chained_extractor(descriptor->nextInChain);
+  ChainedStructExtractor chain_extractor(descriptor->nextInChain);
   VkSurfaceKHR surface = VK_NULL_HANDLE;
 
 #if GFX_PLATFORM_IS(WIN32)
   auto* surface_source_hwnd =
-      chained_extractor.GetStruct<WGPUSurfaceSourceWindowsHWND>(
+      chain_extractor.GetStruct<WGPUSurfaceSourceWindowsHWND>(
           WGPUSType_SurfaceSourceWindowsHWND);
+  if (!surface_source_hwnd)
+    return nullptr;
 
   VkWin32SurfaceCreateInfoKHR win32_create_info = {
       VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR};
@@ -50,7 +52,7 @@ WGPUSurface GFXInstance::CreateSurface(
 
   vkCreateWin32SurfaceKHR(instance_, &win32_create_info, nullptr, &surface);
 #else
-#error Unsupport Platform Surface
+#error Unsupport Platform
 #endif
 
   if (surface == VK_NULL_HANDLE)
@@ -78,20 +80,16 @@ void GFXInstance::ProcessEvents() {
 WGPUFuture GFXInstance::RequestAdapter(
     WGPURequestAdapterOptions const* options,
     WGPURequestAdapterCallbackInfo callbackInfo) {
-  if (!callbackInfo.callback) {
-    GFX_ERROR() << __FUNCTION__ << ": callback is null.";
+  if (!callbackInfo.callback)
     return kInvalidFuture;
-  }
 
   uint32_t adapter_count = 0;
   vkEnumeratePhysicalDevices(instance_, &adapter_count, nullptr);
   std::vector<VkPhysicalDevice> physical_devices(adapter_count);
   vkEnumeratePhysicalDevices(instance_, &adapter_count,
                              physical_devices.data());
-  if (!adapter_count) {
-    GFX_ERROR() << __FUNCTION__ << ": no adapters found.";
+  if (!adapter_count)
     return kInvalidFuture;
-  }
 
   for (uint32_t i = 0; i < adapter_count; ++i) {
     VkPhysicalDevice vk_adapter = physical_devices[i];

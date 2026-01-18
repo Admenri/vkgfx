@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "gfx/common/log.h"
+#include "gfx/common/platform.h"
 #include "gfx/gfx_instance.h"
 #include "gfx/gfx_utils.h"
 
@@ -21,6 +22,13 @@ const std::vector<const char*> kLayerNames = {
 
 const std::vector<const char*> kExtensionNames = {
     VK_EXT_DEBUG_UTILS_EXTENSION_NAME,
+    VK_EXT_VALIDATION_FEATURES_EXTENSION_NAME,
+    VK_KHR_SURFACE_EXTENSION_NAME,
+#if GFX_PLATFORM_IS(WIN32)
+    VK_KHR_WIN32_SURFACE_EXTENSION_NAME,
+#else
+#error Unsupport Platform
+#endif  // WIN32
 };
 
 const std::array<WGPUInstanceFeatureName, 3> kSupportedInstanceFeatures = {
@@ -45,12 +53,9 @@ VKAPI_ATTR VkBool32 VKAPI_CALL OnInstanceCreationDebugUtilsCallback(
 
 // static
 GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
-  if (volkGetLoadedInstance() == VK_NULL_HANDLE) {
-    if (volkInitialize() != VK_SUCCESS) {
-      GFX_ERROR() << __FUNCTION__ << ": Failed to initialize volk loader.";
+  if (volkGetLoadedInstance() == VK_NULL_HANDLE)
+    if (volkInitialize() != VK_SUCCESS)
       return nullptr;
-    }
-  }
 
   uint32_t instance_version = 0;
   vkEnumerateInstanceVersion(&instance_version);
@@ -110,10 +115,8 @@ GFXInstance* CreateInstance(WGPUInstanceDescriptor const* descriptor) {
   create_chain.Add(&utils_messenger_create_info);
 
   VkInstance instance;
-  if (vkCreateInstance(&create_info, nullptr, &instance) != VK_SUCCESS) {
-    GFX_ERROR() << __FUNCTION__ << ": Failed to create Vulkan instance.";
+  if (vkCreateInstance(&create_info, nullptr, &instance) != VK_SUCCESS)
     return nullptr;
-  }
 
   if (volkGetLoadedInstance() == VK_NULL_HANDLE)
     volkLoadInstance(instance);
@@ -135,13 +138,7 @@ void GetInstanceFeatures(WGPUSupportedInstanceFeatures* features) {
 
 // static
 WGPUStatus GetInstanceLimits(WGPUInstanceLimits* limits) {
-  if (limits->nextInChain) {
-    GFX_ERROR() << __FUNCTION__ << ": unsupported chained struct.";
-    return WGPUStatus_Error;
-  }
-
   limits->timedWaitAnyMaxCount = std::numeric_limits<size_t>::max();
-
   return WGPUStatus_Success;
 }
 

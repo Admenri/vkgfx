@@ -13,6 +13,23 @@
 
 namespace vkgfx {
 
+// Utils convert
+VkSampleCountFlagBits ToVulkanSampleCount(uint32_t samples);
+VkImageUsageFlags ToVulkanImageUsage(WGPUTextureUsage usage,
+                                     WGPUTextureFormat format);
+
+// Constants convert
+VkCompareOp ToVulkanCompareOp(WGPUCompareFunction op);
+VkSamplerAddressMode ToVulkanSamplerAddressMode(WGPUAddressMode mode);
+VkFilter ToVulkanSamplerFilter(WGPUFilterMode filter);
+VkSamplerMipmapMode ToVulkanMipMapMode(WGPUMipmapFilterMode filter);
+VkDescriptorType ToVulkanDescriptorType(const WGPUBindGroupLayoutEntry& entry);
+VkShaderStageFlags ToVulkanShaderStages(WGPUShaderStage stages);
+VkBufferUsageFlags ToVulkanBufferUsage(WGPUBufferUsage usage);
+VkFormat ToVulkanPixelFormat(WGPUTextureFormat format);
+VkImageViewType ToVulkanTextureViewDimension(
+    WGPUTextureViewDimension dimension);
+
 // External ref_counted adapt
 template <class Ty>
 inline Ty* AdaptExternalRefCounted(Ty* obj) {

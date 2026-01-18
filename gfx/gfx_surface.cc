@@ -31,15 +31,11 @@ void GFXSurface::Configure(WGPUSurfaceConfiguration const* config) {}
 WGPUStatus GFXSurface::GetCapabilities(WGPUAdapter adapter,
                                        WGPUSurfaceCapabilities* capabilities) {
   auto* adapter_impl = static_cast<GFXAdapter*>(adapter);
-  if (!adapter_impl) {
-    GFX_ERROR() << __FUNCTION__ << ": Invalid adapter.";
+  if (!adapter_impl)
     return WGPUStatus_Error;
-  }
 
-  if (!capabilities) {
-    GFX_ERROR() << __FUNCTION__ << ": capabilities is null.";
+  if (!capabilities)
     return WGPUStatus_Error;
-  }
 
   // Capabilities
   VkSurfaceCapabilitiesKHR surface_capabilities;

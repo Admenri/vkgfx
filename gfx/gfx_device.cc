@@ -4,50 +4,14 @@
 
 #include "gfx/gfx_device.h"
 
+#include <map>
+
+#include "gfx/gfx_bind_group.h"
+#include "gfx/gfx_bind_group_layout.h"
+#include "gfx/gfx_buffer.h"
 #include "gfx/gfx_sampler.h"
+#include "gfx/gfx_texture.h"
 #include "gfx/gfx_utils.h"
-
-namespace {
-
-VkSamplerAddressMode ToVulkanSamplerAddressMode(WGPUAddressMode mode) {
-  switch (mode) {
-    case WGPUAddressMode_Repeat:
-      return VK_SAMPLER_ADDRESS_MODE_REPEAT;
-    case WGPUAddressMode_MirrorRepeat:
-      return VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
-    case WGPUAddressMode_ClampToEdge:
-      return VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-    case WGPUAddressMode_Undefined:
-      break;
-  }
-  return VkSamplerAddressMode();
-}
-
-VkFilter ToVulkanSamplerFilter(WGPUFilterMode filter) {
-  switch (filter) {
-    case WGPUFilterMode_Linear:
-      return VK_FILTER_LINEAR;
-    case WGPUFilterMode_Nearest:
-      return VK_FILTER_NEAREST;
-    case WGPUFilterMode_Undefined:
-      break;
-  }
-  return VkFilter();
-}
-
-VkSamplerMipmapMode ToVulkanMipMapMode(WGPUMipmapFilterMode filter) {
-  switch (filter) {
-    case WGPUMipmapFilterMode_Linear:
-      return VK_SAMPLER_MIPMAP_MODE_LINEAR;
-    case WGPUMipmapFilterMode_Nearest:
-      return VK_SAMPLER_MIPMAP_MODE_NEAREST;
-    case WGPUMipmapFilterMode_Undefined:
-      break;
-  }
-  return VkSamplerMipmapMode();
-}
-
-}  // namespace
 
 namespace vkgfx {
 
@@ -56,14 +20,16 @@ namespace vkgfx {
 
 GFXDevice::GFXDevice(VkDevice device,
                      RefPtr<GFXAdapter> adapter,
-                     const std::string& label,
+                     WGPUStringView label,
                      WGPUDeviceLostCallbackInfo device_lost_callback,
                      WGPUUncapturedErrorCallbackInfo uncaptured_error_callback)
     : device_(device),
       adapter_(adapter),
-      label_(label),
       device_lost_callback_(device_lost_callback),
       uncaptured_error_callback_(uncaptured_error_callback) {
+  if (label.data && label.length)
+    label_ = std::string(label.data, label.length);
+
   CreateAllocatorInternal();
 }
 
@@ -95,57 +61,196 @@ void GFXDevice::CallDeviceErrorCallback(WGPUErrorType type,
 
 WGPUBindGroup GFXDevice::CreateBindGroup(
     WGPUBindGroupDescriptor const* descriptor) {
-  return WGPUBindGroup();
+  if (!device_)
+    return nullptr;
+
+  if (!descriptor)
+    return nullptr;
+
+  if (!descriptor->layout)
+    return nullptr;
+
+  auto* bind_group_layout =
+      static_cast<GFXBindGroupLayout*>(descriptor->layout);
+
+  // Pool
+  std::vector<VkDescriptorPoolSize> pool_sizes;
+  for (const auto& it : bind_group_layout->GetLayoutEntries()) {
+    auto descriptor_type = ToVulkanDescriptorType(it.main);
+    auto iter = std::find_if(pool_sizes.begin(), pool_sizes.end(),
+                             [&](const VkDescriptorPoolSize& it) {
+                               return it.type == descriptor_type;
+                             });
+
+    auto descriptor_count = std::max<uint32_t>(1, it.main.bindingArraySize);
+    if (iter != pool_sizes.end()) {
+      iter->descriptorCount += descriptor_count;
+    } else {
+      pool_sizes.push_back(
+          VkDescriptorPoolSize{descriptor_type, descriptor_count});
+    }
+  }
+
+  VkDescriptorPoolCreateInfo pool_create_info = {
+      VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO};
+  pool_create_info.maxSets = 1;
+  pool_create_info.poolSizeCount = pool_sizes.size();
+  pool_create_info.pPoolSizes = pool_sizes.data();
+
+  VkDescriptorPool pool;
+  if (vkCreateDescriptorPool(device_, &pool_create_info, nullptr, &pool) !=
+      VK_SUCCESS)
+    return nullptr;
+
+  // Set
+  auto vk_layout = bind_group_layout->GetVkHandle();
+
+  VkDescriptorSetAllocateInfo allocate_info = {
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO};
+  allocate_info.descriptorPool = pool;
+  allocate_info.descriptorSetCount = 1;
+  allocate_info.pSetLayouts = &vk_layout;
+
+  VkDescriptorSet descriptor_set;
+  vkAllocateDescriptorSets(device_, &allocate_info, &descriptor_set);
+
+  auto* bind_group =
+      new GFXBindGroup(pool, descriptor_set, this, descriptor->label);
+  bind_group->Write(descriptor);
+
+  return AdaptExternalRefCounted(bind_group);
 }
 
 WGPUBindGroupLayout GFXDevice::CreateBindGroupLayout(
     WGPUBindGroupLayoutDescriptor const* descriptor) {
-  return WGPUBindGroupLayout();
+  if (!device_)
+    return nullptr;
+
+  if (!descriptor)
+    return nullptr;
+
+  std::vector<GFXBindGroupLayout::LayoutEntry> layout_entries;
+  std::vector<VkDescriptorSetLayoutBinding> vk_bindings;
+  for (size_t i = 0; i < descriptor->entryCount; ++i) {
+    const auto& entry = descriptor->entries[i];
+
+    VkDescriptorSetLayoutBinding vk_binding = {};
+    vk_binding.binding = entry.binding;
+    vk_binding.descriptorType = ToVulkanDescriptorType(entry);
+    vk_binding.descriptorCount = 1;
+    vk_binding.stageFlags = ToVulkanShaderStages(entry.visibility);
+    vk_bindings.push_back(vk_binding);
+
+    GFXBindGroupLayout::LayoutEntry layout_entry = {};
+    layout_entry.main = entry;
+    layout_entries.push_back(layout_entry);
+  }
+
+  VkDescriptorSetLayoutCreateInfo create_info = {
+      VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO};
+  create_info.bindingCount = vk_bindings.size();
+  create_info.pBindings = vk_bindings.data();
+
+  VkDescriptorSetLayout layout;
+  if (vkCreateDescriptorSetLayout(device_, &create_info, nullptr, &layout) !=
+      VK_SUCCESS)
+    return nullptr;
+
+  return AdaptExternalRefCounted(
+      new GFXBindGroupLayout(layout, layout_entries, this, descriptor->label));
 }
 
 WGPUBuffer GFXDevice::CreateBuffer(WGPUBufferDescriptor const* descriptor) {
-  return WGPUBuffer();
+  if (!device_)
+    return nullptr;
+
+  if (!descriptor)
+    return nullptr;
+
+  VkBufferCreateInfo create_info = {VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO};
+  create_info.size = descriptor->size;
+  create_info.usage = ToVulkanBufferUsage(descriptor->usage);
+
+  VmaAllocationCreateInfo allocation_info = {};
+  allocation_info.usage = VMA_MEMORY_USAGE_AUTO;
+
+  VkBuffer buffer;
+  VmaAllocation allocation;
+  if (vmaCreateBuffer(allocator_, &create_info, &allocation_info, &buffer,
+                      &allocation, nullptr) != VK_SUCCESS)
+    return nullptr;
+
+  if (descriptor->mappedAtCreation) {
+  } else {
+  }
+
+  return AdaptExternalRefCounted(
+      new GFXBuffer(buffer, allocation, this, descriptor->label));
 }
 
 WGPUCommandEncoder GFXDevice::CreateCommandEncoder(
     WGPUCommandEncoderDescriptor const* descriptor) {
+  if (!device_)
+    return nullptr;
+
   return WGPUCommandEncoder();
 }
 
 WGPUComputePipeline GFXDevice::CreateComputePipeline(
     WGPUComputePipelineDescriptor const* descriptor) {
+  if (!device_)
+    return nullptr;
+
   return WGPUComputePipeline();
 }
 
 WGPUFuture GFXDevice::CreateComputePipelineAsync(
     WGPUComputePipelineDescriptor const* descriptor,
     WGPUCreateComputePipelineAsyncCallbackInfo callbackInfo) {
+  if (!device_)
+    return GFXInstance::kInvalidFuture;
+
   return WGPUFuture();
 }
 
 WGPUPipelineLayout GFXDevice::CreatePipelineLayout(
     WGPUPipelineLayoutDescriptor const* descriptor) {
+  if (!device_)
+    return nullptr;
+
   return WGPUPipelineLayout();
 }
 
 WGPUQuerySet GFXDevice::CreateQuerySet(
     WGPUQuerySetDescriptor const* descriptor) {
+  if (!device_)
+    return nullptr;
+
   return WGPUQuerySet();
 }
 
 WGPURenderBundleEncoder GFXDevice::CreateRenderBundleEncoder(
     WGPURenderBundleEncoderDescriptor const* descriptor) {
+  if (!device_)
+    return nullptr;
+
   return WGPURenderBundleEncoder();
 }
 
 WGPURenderPipeline GFXDevice::CreateRenderPipeline(
     WGPURenderPipelineDescriptor const* descriptor) {
+  if (!device_)
+    return nullptr;
+
   return WGPURenderPipeline();
 }
 
 WGPUFuture GFXDevice::CreateRenderPipelineAsync(
     WGPURenderPipelineDescriptor const* descriptor,
     WGPUCreateRenderPipelineAsyncCallbackInfo callbackInfo) {
+  if (!device_)
+    return GFXInstance::kInvalidFuture;
+
   return WGPUFuture();
 }
 
@@ -193,29 +298,98 @@ WGPUSampler GFXDevice::CreateSampler(WGPUSamplerDescriptor const* descriptor) {
 
 WGPUShaderModule GFXDevice::CreateShaderModule(
     WGPUShaderModuleDescriptor const* descriptor) {
+  if (!device_)
+    return nullptr;
+
   return WGPUShaderModule();
 }
 
 WGPUTexture GFXDevice::CreateTexture(WGPUTextureDescriptor const* descriptor) {
-  return WGPUTexture();
+  if (!device_)
+    return nullptr;
+
+  if (!descriptor)
+    return nullptr;
+
+  VkImageCreateInfo create_info = {VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO};
+  switch (descriptor->dimension) {
+    default:
+    case WGPUTextureDimension_1D:
+      create_info.imageType = VK_IMAGE_TYPE_1D;
+      create_info.extent = VkExtent3D{descriptor->size.width, 1, 1};
+      create_info.arrayLayers = 1;
+      break;
+    case WGPUTextureDimension_2D:
+      create_info.imageType = VK_IMAGE_TYPE_2D;
+      create_info.extent =
+          VkExtent3D{descriptor->size.width, descriptor->size.height, 1};
+      create_info.arrayLayers = 1;
+      break;
+    case WGPUTextureDimension_3D:
+      create_info.imageType = VK_IMAGE_TYPE_3D;
+      create_info.extent =
+          VkExtent3D{descriptor->size.width, descriptor->size.height,
+                     descriptor->size.depthOrArrayLayers};
+      create_info.arrayLayers = descriptor->size.depthOrArrayLayers;
+      break;
+  }
+  create_info.format = ToVulkanPixelFormat(descriptor->format);
+  create_info.mipLevels = descriptor->mipLevelCount;
+  create_info.samples = ToVulkanSampleCount(descriptor->sampleCount);
+  create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+  create_info.usage = ToVulkanImageUsage(descriptor->usage, descriptor->format);
+  create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  VmaAllocationCreateInfo allocation_info = {};
+  allocation_info.usage = VMA_MEMORY_USAGE_AUTO;
+
+  VkImage image;
+  VmaAllocation allocation;
+  if (vmaCreateImage(allocator_, &create_info, &allocation_info, &image,
+                     &allocation, nullptr) != VK_SUCCESS)
+    return nullptr;
+
+  return AdaptExternalRefCounted(
+      new GFXTexture(image, allocation, this, descriptor->label));
 }
 
 void GFXDevice::Destroy() {
-  DestroyInternal();
+  if (allocator_) {
+    vmaDestroyAllocator(allocator_);
+    allocator_ = nullptr;
+  }
+
+  if (device_) {
+    vkDestroyDevice(device_, nullptr);
+    device_ = VK_NULL_HANDLE;
+  }
+
+  adapter_.reset();
 }
 
 WGPUStatus GFXDevice::GetAdapterInfo(WGPUAdapterInfo* adapterInfo) {
-  return WGPUStatus();
+  if (adapter_)
+    return adapter_->GetInfo(adapterInfo);
+
+  return WGPUStatus_Error;
 }
 
-void GFXDevice::GetFeatures(WGPUSupportedFeatures* features) {}
+void GFXDevice::GetFeatures(WGPUSupportedFeatures* features) {
+  if (adapter_)
+    adapter_->GetFeatures(features);
+}
 
 WGPUStatus GFXDevice::GetLimits(WGPULimits* limits) {
-  return WGPUStatus();
+  if (adapter_)
+    return adapter_->GetLimits(limits);
+
+  return WGPUStatus_Error;
 }
 
 WGPUFuture GFXDevice::GetLostFuture() {
-  return WGPUFuture();
+  // TODO:
+  return GFXInstance::kInvalidFuture;
 }
 
 WGPUQueue GFXDevice::GetQueue() {
@@ -223,7 +397,10 @@ WGPUQueue GFXDevice::GetQueue() {
 }
 
 WGPUBool GFXDevice::HasFeature(WGPUFeatureName feature) {
-  return WGPUBool();
+  if (adapter_)
+    return adapter_->HasFeature(feature);
+
+  return WGPU_FALSE;
 }
 
 WGPUFuture GFXDevice::PopErrorScope(
@@ -235,20 +412,6 @@ void GFXDevice::PushErrorScope(WGPUErrorFilter filter) {}
 
 void GFXDevice::SetLabel(WGPUStringView label) {
   label_ = std::string(label.data, label.length);
-}
-
-void GFXDevice::DestroyInternal() {
-  adapter_.reset();
-
-  if (allocator_) {
-    vmaDestroyAllocator(allocator_);
-    allocator_ = nullptr;
-  }
-
-  if (device_) {
-    vkDestroyDevice(device_, nullptr);
-    device_ = VK_NULL_HANDLE;
-  }
 }
 
 void GFXDevice::CreateAllocatorInternal() {
